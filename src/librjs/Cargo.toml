@@ -1,0 +1,7 @@
+[package]
+name = "librjs"
+version = "0.1.0"
+authors = ["swgillespie <sean.william.g@gmail.com>"]
+
+[dependencies.librjs_syntax]
+path = "../librjs_syntax"

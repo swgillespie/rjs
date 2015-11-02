@@ -1,0 +1,13 @@
+[package]
+name = "librjs_syntax"
+version = "0.1.0"
+authors = ["swgillespie <sean.william.g@gmail.com>"]
+build = "build.rs"
+
+[build-dependencies]
+phf_codegen = "0.7.5"
+
+[dependencies]
+unicode_categories = "0.1.0"
+itertools = "0.4.1"
+phf = "0.7.5"

@@ -3,16 +3,25 @@ use itertools::PutBackN;
 use std::char;
 use char_classes::CharClassExt;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct Span {
     pub start: Position,
     pub stop: Position
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct Position {
     pub col: u32,
     pub line: u32
+}
+
+impl Span {
+    pub fn new(start: Position, stop: Position) -> Span {
+        Span {
+            start: start,
+            stop: stop
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1034,7 +1043,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         // that the state machine does when it sees a /. If true, the state machine
         // starts a regex literal, while if false, it starts either a div(/)
         // or divequal (/=) token.
-        match self.peek() {
+        let tok = match self.peek() {
             Some('/') if !leading_div => Some(self.div_or_div_equal()),
             Some('/') if leading_div => Some(self.regex()),
             Some('+') => Some(self.plus_or_plus_equal()),
@@ -1066,9 +1075,10 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some(c) if c.is_digit(10) => Some(self.numeric_literal()),
             Some(c) => Some(self.illegal_token(format!("unexpected char: {}", c))),
             None => None
-        }
+        };
 
-
+        println!("yielding token: {:?}", tok);
+        tok
     }
 
     pub fn next_token_leading_div(&mut self) -> Option<Token> {

@@ -34,7 +34,7 @@ macro_rules! span_unexpected_eof {
                 }
             },
             message: "unexpected EOF".to_string(),
-            more_input: true
+            more_input: panic!("unexpected EOF")
         })
     }
 }
@@ -66,7 +66,8 @@ pub struct Parser<I: Iterator<Item=char>> {
     strict_mode: bool,
     peek_stack: Vec<Token>,
     in_directive_prologue: bool,
-    last_span: Span
+    last_span: Span,
+    in_disallowed: bool
 }
 
 impl<I: Iterator<Item=char>> Parser<I> {
@@ -76,7 +77,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
             strict_mode: false,
             peek_stack: vec![],
             in_directive_prologue: false,
-            last_span: Default::default()
+            last_span: Default::default(),
+            in_disallowed: false
         }
     }
 
@@ -116,6 +118,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             }
         }
 
+
         Ok(Program {
             directive_prologue: prolog,
             statements: statements
@@ -130,15 +133,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn next_token(&mut self, leading_div: bool) -> Option<Token> {
-        let tok = self.peek_stack.pop()
+        self.peek_stack.pop()
             .or_else(|| if leading_div {
                 self.lexer.next_token_leading_div()
             } else {
                 self.lexer.next_token()
-            });
-
-        println!("next token yields: {:?}", tok);
-        tok
+            })
     }
 
     fn insert_token(&mut self, token: Token) {
@@ -159,10 +159,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             }
         }
 
-        let peeked = self.peek_stack.first();
-        println!("peeking: {:?}", peeked);
-        println!("peek stack is now: {:?}", self.peek_stack);
-        peeked
+        self.peek_stack.first()
     }
 
     fn eat_semicolon(&mut self) -> ParseResult<Span> {
@@ -250,7 +247,6 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // section 7.9.1 automatic semicolon insertion
         // only rule 1 is handled here. Rules 2 and 3 are handled
         // elsewhere.
-        println!("trying to insert a semicolon before offending token {:?}", offending_token);
         if offending_token.preceded_by_newline || offending_token.kind == TokenKind::RightBrace {
             // rule 1 - if the token is preceded by a newline or
             // it's a right brace, insert a semicolon.
@@ -259,14 +255,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn insert_semicolon(&mut self) {
-        println!("inserting semicolon");
         let last_span = self.last_span;
         self.insert_token(Token {
             span: last_span,
             kind: TokenKind::Semicolon,
             preceded_by_newline: true
         });
-        println!("  peek stack now {:?}", self.peek_stack);
     }
 
     // begin grammar productions
@@ -478,11 +472,94 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn switch_statement(&mut self) -> ParseResult<SpannedStatement> {
-        unimplemented!();
+        let Span { start, .. } = try!(self.eat_token(TokenKind::Switch, true));
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        let expr = try!(self.expression());
+        let _ = try!(self.eat_token(TokenKind::RightParen, false));
+        let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
+        let mut cases = vec![];
+        loop {
+            // SPEC_NOTE: for some reason a switch statement with no cases
+            // is legal.
+            if next_token_is!(self, false, TokenKind::RightBrace) {
+                break;
+            }
+
+            cases.push(try!(self.switch_case()));
+        }
+
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBrace, false));
+
+        Ok(Spanned::new(Span::new(start, stop), Statement::Switch(expr, cases)))
+    }
+
+    fn switch_case(&mut self) -> ParseResult<SwitchCase> {
+        let test = if next_token_is!(self, false, TokenKind::Default) {
+            let _ = try!(self.eat_token(TokenKind::Default, false));
+            let _ = try!(self.eat_token(TokenKind::Colon, false));
+            None
+        } else {
+            let _ = try!(self.eat_token(TokenKind::Case, false));
+            let expr = try!(self.expression());
+            let _ = try!(self.eat_token(TokenKind::Colon, false));
+            Some(expr)
+        };
+
+        // this part is a little weird since we're parsing recursive
+        // descent, unlike the reference grammar. We want to parse a list of statements.
+        // We stop parsing when 1) we see either a "case" or "default" token, indicating
+        // that we're going to start a new switch case, or 2) we see a right brace,
+        // in which case we've reached the end of the switch statement.
+        let mut statements = vec![];
+        loop {
+            if next_token_is!(self, false, TokenKind::Default, TokenKind::Case, TokenKind::RightBrace) {
+                break;
+            }
+
+            statements.push(try!(self.statement()));
+        }
+
+        Ok(SwitchCase {
+            test: test,
+            body: statements
+        })
     }
 
     fn identifier_or_label(&mut self) -> ParseResult<SpannedStatement> {
-        unimplemented!();
+        // this production is a side-effect of the reference grammar being
+        // LL(2). When we are parsing a statement and see an identifier,
+        // it can be one of two things:
+        //   1) An expression - "hello + 2", "hello.foo", etc.
+        //   2) A labeled statement: "thing: while(true) break thing;"
+        // The parser is currently looking at an identifier. We need to look ahead
+        // one more token to see if the next token after that is a colon. If so,
+        // this function parses a labeled statement. If not, this function backs
+        // up one token and calls into the expression production.
+        let ident_token = try!(self.identifier());
+        match self.peek(false) {
+            Some(&Token { kind: TokenKind::Colon, .. }) => (),
+            _ => {
+                // we're going to have to bail here
+                // since this is an expression statement
+                self.insert_token(Token {
+                    span: ident_token.span,
+                    kind: TokenKind::Identifier(ident_token.data),
+                    // i've thought about this for a while, and I think it's
+                    // okay to always set this to false. The reason is that
+                    // even if we choose to back off and enter the expression
+                    // statement prodouction, what we see now can /always/
+                    // be parsed as an expression statement with an inserted
+                    // semicolon.
+                    preceded_by_newline: false
+                });
+                return self.expression_statement();
+            }
+        }
+
+        let _ = try!(self.eat_token(TokenKind::Colon, false));
+        let stmt = try!(self.statement());
+        Ok(Spanned::new(Span::new(ident_token.span.start, stmt.span.stop),
+                        Statement::Label(ident_token, Box::new(stmt))))
     }
 
     fn throw_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -498,7 +575,52 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn try_statement(&mut self) -> ParseResult<SpannedStatement> {
-        unimplemented!()
+        let Span {start, .. } = try!(self.eat_token(TokenKind::Try, true));
+        let block = try!(self.block());
+        let catch = if next_token_is!(self, false, TokenKind::Catch) {
+            Some(try!(self.catch()))
+        } else {
+            None
+        };
+
+        let finally = if next_token_is!(self, false, TokenKind::Finally) {
+            Some(Box::new(try!(self.finally())))
+        } else {
+            None
+        };
+
+        if catch.is_none() && finally.is_none() {
+            span_err!(Span::new(start, self.last_span.stop),
+                      "missing catch or finally after try block");
+        }
+        let stop = if finally.is_none() {
+            catch.as_ref().unwrap().body.span.stop
+        } else {
+            finally.as_ref().unwrap().span.stop
+        };
+
+        Ok(Spanned::new(Span::new(start, stop),
+                        Statement::Try(Box::new(block), catch, finally)))
+    }
+
+    fn catch(&mut self) -> ParseResult<CatchClause> {
+        let _ = try!(self.eat_token(TokenKind::Catch, false));
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        let ident = try!(self.identifier());
+        let _ = try!(self.eat_token(TokenKind::RightParen, false));
+        let block = try!(self.block());
+        Ok(CatchClause {
+            param: SpannedPattern {
+                span: ident.span,
+                data: Pattern::Identifier(ident)
+            },
+            body: Box::new(block)
+        })
+    }
+
+    fn finally(&mut self) -> ParseResult<SpannedStatement> {
+        let _ = try!(self.eat_token(TokenKind::Finally, false));
+        self.block()
     }
 
     fn debugger_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -518,18 +640,73 @@ impl<I: Iterator<Item=char>> Parser<I> {
         };
         let _ = try!(self.eat_token(TokenKind::RightParen, false));
         let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
-        let body = try!(self.function_body());
+        let (prolog, body) = try!(self.function_body());
         let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBrace, false));
 
-        Ok(Spanned::new(Span::new(start, stop), Statement::Declaration(Declaration::Function(ident, params, Box::new(body)))))
+        let function = Function {
+            name: Some(ident),
+            parameters: params,
+            prologue: prolog,
+            body: body
+        };
+
+        Ok(Spanned::new(Span::new(start, stop),
+                        Statement::Declaration(Declaration::Function(function))))
     }
+
+    fn function_body(&mut self) -> ParseResult<(Vec<SpannedStatement>, Vec<SpannedStatement>)> {
+        let mut statements = vec![];
+        let mut prolog = vec![];
+        self.in_directive_prologue = true;
+        loop {
+            if next_token_is!(self, true, TokenKind::RightBrace) {
+                break;
+            }
+
+            let statement = try!(self.statement());
+
+            // section 14.1 - "Directive Prologues and the Use Strict Directive"
+            // the "prologue" of a program consists of the longest
+            // sequence of ExpressionStatements. These can have
+            // implementation-defined meanings, but in the case of
+            // the standard, the only required one is "use strict",
+            // which puts the interpreter into strict mode.
+            if let Statement::Expression(_) = statement.data {
+                if self.in_directive_prologue {
+                    prolog.push(statement);
+                } else {
+                    statements.push(statement);
+                }
+            } else {
+                if self.in_directive_prologue {
+                    self.in_directive_prologue = false;
+                }
+
+                statements.push(statement);
+            }
+        }
+
+        Ok((prolog, statements))
+    }
+
 
     fn formal_parameters(&mut self) -> ParseResult<Vec<SpannedPattern>> {
-        unimplemented!()
-    }
+        // there's guaranteed to be at least one identifier here.
+        let mut parameters = vec![];
+        let ident = try!(self.identifier());
+        parameters.push(Spanned::new(ident.span, Pattern::Identifier(ident)));
 
-    fn function_body(&mut self) -> ParseResult<SpannedStatement> {
-        unimplemented!()
+        loop {
+            if next_token_is!(self, false, TokenKind::RightParen) {
+                break;
+            }
+
+            let _ = try!(self.eat_token(TokenKind::Comma, false));
+            let ident = try!(self.identifier());
+            parameters.push(Spanned::new(ident.span, Pattern::Identifier(ident)));
+        }
+
+        Ok(parameters)
     }
 
     fn expression_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -542,12 +719,627 @@ impl<I: Iterator<Item=char>> Parser<I> {
         Ok(Spanned::new(Span::new(expr.span.start, stop), Statement::Expression(expr)))
     }
 
-    fn assignment_expression(&mut self) -> ParseResult<SpannedExpression> {
+    // Expressions!
+
+    fn primary_expression(&mut self) -> ParseResult<SpannedExpression> {
+        match_peek! {
+            self, true,
+            TokenKind::This => self.this(),
+            TokenKind::Identifier(_) => self.identifier_expr(),
+            TokenKind::BooleanLiteral(_) => self.boolean_literal(),
+            TokenKind::StringLiteral(_) => self.string_literal(),
+            TokenKind::RegularExpressionLiteral(_, _) => self.regex_literal(),
+            TokenKind::DecimalLiteral(_) => self.decimal_literal(),
+            TokenKind::HexIntegerLiteral(_) => self.hex_integer_literal(),
+            TokenKind::OctalIntegerLiteral(_) => self.octal_integer_literal(),
+            TokenKind::LeftBracket => self.array_literal(),
+            TokenKind::LeftBrace => self.object_literal(),
+            _ => span_err!(Default::default(), "unexpected token: {:?}", self.peek(true).unwrap())
+        }
+    }
+
+    fn this(&mut self) -> ParseResult<SpannedExpression> {
+        let span = try!(self.eat_token(TokenKind::This, false));
+        Ok(Spanned::new(span, Expression::This))
+    }
+
+    fn identifier_expr(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn boolean_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn string_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn regex_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn decimal_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn hex_integer_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn octal_integer_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn array_literal(&mut self) -> ParseResult<SpannedExpression> {
+        unimplemented!()
+    }
+
+    fn object_literal(&mut self) -> ParseResult<SpannedExpression> {
         unimplemented!()
     }
 
     fn expression(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let expr = try!(self.assignment_expression());
+        if next_token_is!(self, false, TokenKind::Comma) {
+            // this is a comma-operator sequence
+            let mut sequence = vec![expr];
+            loop {
+                if !next_token_is!(self, false, TokenKind::Comma) {
+                    break;
+                }
+
+                let _ = try!(self.eat_token(TokenKind::Comma, false));
+                sequence.push(try!(self.expression()));
+            }
+
+            let span = Span::new(sequence.first().unwrap().span.start,
+                                 sequence.last().unwrap().span.stop);
+            Ok(Spanned::new(span, Expression::Sequence(sequence)))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn assignment_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let lhs = try!(self.conditional_expression());
+        if next_token_is!(self, false, TokenKind::Equal,
+                          TokenKind::StarEqual,
+                          TokenKind::DivEquals,
+                          TokenKind::PercentEqual,
+                          TokenKind::PlusEqual,
+                          TokenKind::MinusEqual,
+                          TokenKind::LeftShiftEqual,
+                          TokenKind::RightShiftEqual,
+                          TokenKind::TripleRightShiftEqual,
+                          TokenKind::BitwiseAndEqual,
+                          TokenKind::BitwiseXorEqual,
+                          TokenKind::BitwiseOrEqual) {
+            let op = try!(self.eat_assignment_op());
+            let rhs = try!(self.assignment_expression());
+            let span = Span::new(lhs.span.start, rhs.span.stop);
+            let lhs_pat = try!(self.verify_assignment_lhs(lhs));
+            Ok(Spanned::new(span, Expression::Assignment(op, lhs_pat, Box::new(rhs))))
+        } else {
+            Ok(lhs)
+        }
+    }
+
+    fn eat_assignment_op(&mut self) -> ParseResult<AssignmentOperator> {
+        let op = match_peek!{
+            self, false,
+            TokenKind::Equal => AssignmentOperator::Equal,
+            TokenKind::StarEqual => AssignmentOperator::TimesEqual,
+            TokenKind::DivEquals => AssignmentOperator::DivEqual,
+            TokenKind::PercentEqual => AssignmentOperator::ModEqual,
+            TokenKind::PlusEqual => AssignmentOperator::PlusEqual,
+            TokenKind::MinusEqual => AssignmentOperator::MinusEqual,
+            TokenKind::LeftShiftEqual => AssignmentOperator::LeftShiftEqual,
+            TokenKind::RightShiftEqual => AssignmentOperator::RightShiftEqual,
+            TokenKind::TripleRightShiftEqual => AssignmentOperator::TripleRightShiftEqual,
+            TokenKind::BitwiseAndEqual => AssignmentOperator::BitwiseAndEqual,
+            TokenKind::BitwiseXorEqual => AssignmentOperator::BitwiseXorEqual,
+            TokenKind::BitwiseOrEqual => AssignmentOperator::BitwiseOrEqual,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(op)
+    }
+
+    fn verify_assignment_lhs(&mut self, lhs: SpannedExpression) -> ParseResult<PatternOrExpression> {
+        // In order to avoid catastrophic lookahead when parsing the
+        // AssignmentExpression production as given in the reference grammar,
+        // we parse a strict superset of what's allowed in the left hand
+        // size of an assignment statement. Here, we have to verify
+        // that whatever we've parsed is legal as the left hand side
+        // of an assignment operator.
+        //
+        // In general, all we have to do here is verify that whatever we
+        // parsed is not an "operator expression", i.e. some sort of binary,
+        // unary, or ternary expression.
+        //
+        // It's also impossible for a Sequence expression to appear
+        // on the LHS of an assignment statement, since
+        // the comma operator is lower in precedence than the assignment operators.
+        // The expression "x, y = 42" is parsed as the expression sequence
+        // Seq(x, y = 42), since the comma operator has such low precedence.
+        match lhs.data {
+            Expression::Unary(_, _, _) |
+            Expression::Binary(_, _, _) |
+            Expression::Conditional(_, _, _) |
+            Expression::Assignment(_, _, _) |
+            Expression::Logical(_, _, _) |
+            Expression::Update(_, _, _) => span_err!(lhs.span, "illegal left-hand side in assignment"),
+            _ => ()
+        }
+
+        // es5 only allows identifiers as patterns.
+        let pat_or_exp = match lhs.data {
+            Expression::Identifier(ref data) => PatternOrExpression::Pattern(Spanned {
+                span: lhs.span,
+                data: Pattern::Identifier(data.clone())
+            }),
+            _ => PatternOrExpression::Expr(Box::new(lhs))
+        };
+
+        Ok(pat_or_exp)
+    }
+
+    fn conditional_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.logical_or_expression());
+        if next_token_is!(self, false, TokenKind::QuestionMark) {
+            // ternary operator
+            let _ = try!(self.eat_token(TokenKind::QuestionMark, false));
+            let true_expr = try!(self.assignment_expression());
+            let _ = try!(self.eat_token(TokenKind::Colon, false));
+            let false_expr = try!(self.assignment_expression());
+            let span = Span::new(expr.span.start, false_expr.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Conditional(Box::new(expr),
+                                                    Box::new(true_expr),
+                                                    Box::new(false_expr))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn logical_or_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.logical_and_expression());
+        if next_token_is!(self, false, TokenKind::LogicalOr) {
+            let _ = try!(self.eat_token(TokenKind::LogicalOr, false));
+            let rhs = try!(self.logical_and_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Logical(LogicalOperator::Or, Box::new(expr), Box::new(rhs))))
+
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn logical_and_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.bitwise_or_expression());
+        if next_token_is!(self, false, TokenKind::LogicalAnd) {
+            let _ = try!(self.eat_token(TokenKind::LogicalAnd, false));
+            let rhs = try!(self.bitwise_or_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Logical(LogicalOperator::And, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn bitwise_or_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.bitwise_xor_expression());
+        if next_token_is!(self, false, TokenKind::BitwiseOr) {
+            let _ = try!(self.eat_token(TokenKind::BitwiseOr, false));
+            let rhs = try!(self.bitwise_xor_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(BinaryOperator::BitwiseOr, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn bitwise_xor_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.bitwise_and_expression());
+        if next_token_is!(self, false, TokenKind::BitwiseXor) {
+            let _ = try!(self.eat_token(TokenKind::BitwiseXor, false));
+            let rhs = try!(self.bitwise_and_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(BinaryOperator::BitwiseXor, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn bitwise_and_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.equality_expression());
+        if next_token_is!(self, false, TokenKind::BitwiseAnd) {
+            let _ = try!(self.eat_token(TokenKind::BitwiseAnd, false));
+            let rhs = try!(self.equality_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(BinaryOperator::BitwiseAnd, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn equality_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.relational_expression());
+        if next_token_is!(self, false, TokenKind::DoubleEqual,
+                          TokenKind::DoubleNotEqual,
+                          TokenKind::TripleEqual,
+                          TokenKind::TripleNotEqual) {
+            let kind = try!(self.eat_equality_operator());
+            let rhs = try!(self.relational_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn eat_equality_operator(&mut self) -> ParseResult<BinaryOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::DoubleEqual => BinaryOperator::Equal,
+            TokenKind::DoubleNotEqual => BinaryOperator::NotEqual,
+            TokenKind::TripleEqual => BinaryOperator::StrictEqual,
+            TokenKind::TripleNotEqual => BinaryOperator::StrictNotEqual,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
+    }
+
+    fn relational_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.shift_expression());
+        if next_token_is!(self, false, TokenKind::LessThan,
+                          TokenKind::LessThanEqual,
+                          TokenKind::GreaterThan,
+                          TokenKind::GreaterThanEqual,
+                          TokenKind::InstanceOf) {
+            let kind = try!(self.eat_relational_operator());
+            let rhs = try!(self.shift_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
+        } else if !self.in_disallowed && next_token_is!(self, false, TokenKind::In) {
+            let _ = try!(self.eat_token(TokenKind::In, false));
+            let rhs = try!(self.shift_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(BinaryOperator::In, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn eat_relational_operator(&mut self) -> ParseResult<BinaryOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::LessThan => BinaryOperator::LessThan,
+            TokenKind::LessThanEqual => BinaryOperator::LessThanEq,
+            TokenKind::GreaterThan => BinaryOperator::GreaterThan,
+            TokenKind::GreaterThanEqual => BinaryOperator::GreaterThanEq,
+            TokenKind::InstanceOf => BinaryOperator::Instanceof,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
+    }
+
+    fn shift_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.additive_expression());
+        if next_token_is!(self, false, TokenKind::LeftShift,
+                          TokenKind::RightShift,
+                          TokenKind::TripleRightShift) {
+            let kind = try!(self.eat_shift_operator());
+            let rhs = try!(self.additive_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn eat_shift_operator(&mut self) -> ParseResult<BinaryOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::LeftShift => BinaryOperator::LeftShift,
+            TokenKind::RightShift => BinaryOperator::RightShift,
+            TokenKind::TripleRightShift => BinaryOperator::TripleRightShift,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
+    }
+
+    fn additive_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.multiplicative_expression());
+        if next_token_is!(self, false, TokenKind::Plus,
+                          TokenKind::Minus) {
+            let kind = try!(self.eat_additive_operator());
+            let rhs = try!(self.multiplicative_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn eat_additive_operator(&mut self) -> ParseResult<BinaryOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::Plus => BinaryOperator::Plus,
+            TokenKind::Minus => BinaryOperator::Minus,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
+    }
+
+    fn multiplicative_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.unary_expression());
+        if next_token_is!(self, false, TokenKind::Star,
+                          TokenKind::Div,
+                          TokenKind::Percent) {
+            let kind = try!(self.eat_multiplicative_operator());
+            let rhs = try!(self.unary_expression());
+            let span = Span::new(expr.span.start, rhs.span.stop);
+            Ok(Spanned::new(span,
+                            Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn eat_multiplicative_operator(&mut self) -> ParseResult<BinaryOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::Star => BinaryOperator::Times,
+            TokenKind::Div => BinaryOperator::Div,
+            TokenKind::Percent => BinaryOperator::Mod,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
+    }
+
+    fn unary_expression(&mut self) -> ParseResult<SpannedExpression> {
+        if next_token_is!(self, false, TokenKind::Delete,
+                          TokenKind::Void,
+                          TokenKind::TypeOf,
+                          TokenKind::DoublePlus,
+                          TokenKind::DoubleMinus,
+                          TokenKind::Plus,
+                          TokenKind::Minus,
+                          TokenKind::BitwiseNot,
+                          TokenKind::LogicalNot) {
+            // TODO DoublePlus and DoubleMinus are update operators
+            let kind = try!(self.eat_unary_operator());
+            let kind_span = self.last_span;
+            let expr = Box::new(try!(self.unary_expression()));
+            let span = Span::new(kind_span.start, expr.span.stop);
+            Ok(Spanned::new(span, Expression::Unary(kind, true, expr)))
+        } else {
+            self.postfix_expression()
+        }
+    }
+
+    fn eat_unary_operator(&mut self) -> ParseResult<UnaryOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::Delete => UnaryOperator::Delete,
+            TokenKind::Void => UnaryOperator::Void,
+            TokenKind::TypeOf => UnaryOperator::Typeof,
+            TokenKind::DoublePlus => unimplemented!(),
+            TokenKind::DoubleMinus => unimplemented!(),
+            TokenKind::Plus => UnaryOperator::Plus,
+            TokenKind::Minus => UnaryOperator::Minus,
+            TokenKind::BitwiseNot => UnaryOperator::BitwiseNot,
+            TokenKind::LogicalNot => UnaryOperator::LogicalNot,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
+    }
+
+    fn postfix_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let expr = try!(self.left_hand_side_expression());
+        if next_token_is!(self, false, TokenKind::DoublePlus,
+                          TokenKind::DoubleMinus) {
+            let token = self.next_token(false).unwrap();
+            // this is a restricted production. If this token is
+            // preceded by a newline, we have to insert a semicolon
+            // and backtrack.
+            if token.preceded_by_newline {
+                self.insert_token(token);
+                self.insert_semicolon();
+                Ok(expr)
+            } else {
+                let kind = if token.kind == TokenKind::DoublePlus {
+                    UpdateOperator::Increment
+                } else {
+                    UpdateOperator::Decrement
+                };
+                let span = Span::new(expr.span.start, token.span.stop);
+                Ok(Spanned::new(span, Expression::Update(kind, false, Box::new(expr))))
+            }
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn left_hand_side_expression(&mut self) -> ParseResult<SpannedExpression> {
+        match_peek! {
+            self, true,
+            TokenKind::New => self.new_expression(),
+            _ => self.call_expression()
+        }
+    }
+
+    // SPEC_NOTE: we deviate from the reference grammar a little bit here to
+    // avoid separating the logic that parses new calls.
+    fn new_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let Span { start, .. } = try!(self.eat_token(TokenKind::New, true));
+        if next_token_is!(self, true, TokenKind::New) {
+            let new_expr = try!(self.new_expression());
+            let span = Span::new(start, new_expr.span.stop);
+            Ok(Spanned::new(span, Expression::New(Box::new(new_expr), vec![])))
+        } else {
+            let member = try!(self.member_expression());
+            let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+            let args = try!(self.actual_parameters());
+            let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
+            Ok(Spanned::new(Span::new(start, stop),
+                            Expression::New(Box::new(member), args)))
+        }
+    }
+
+    fn actual_parameters(&mut self) -> ParseResult<Vec<SpannedExpression>> {
+        if next_token_is!(self, false, TokenKind::RightParen) {
+            return Ok(vec![])
+        }
+
+        let mut parameters = vec![];
+        loop {
+            parameters.push(try!(self.assignment_expression()));
+
+            if next_token_is!(self, false, TokenKind::RightParen) {
+                break;
+            }
+
+            let _ = try!(self.eat_token(TokenKind::Comma, false));
+        }
+
+        Ok(parameters)
+    }
+
+    fn call_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let member = try!(self.member_expression());
+        if !next_token_is!(self, false, TokenKind::LeftParen) {
+            return Ok(member)
+        }
+
+        // otherwise - it's a call.
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        let args = try!(self.actual_parameters());
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
+
+        let mut expr = Spanned::new(Span::new(member.span.start, stop),
+                                    Expression::Call(Box::new(member), args));
+        // if we are looking at a (, a [, or a ., this is a chained call
+        // and we need to keep parsing.
+        loop {
+            if self.peek(false).is_none() {
+                break;
+            }
+
+            match_peek! {
+                self, false,
+                TokenKind::LeftParen => {
+                    let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+                    let args = try!(self.actual_parameters());
+                    let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
+                    expr = Spanned::new(Span::new(expr.span.start, stop),
+                                        Expression::Call(Box::new(expr), args));
+                },
+                TokenKind::LeftBracket => {
+                    let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
+                    let property = try!(self.expression());
+                    let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBracket, false));
+                    expr = Spanned::new(Span::new(expr.span.start, stop),
+                                        Expression::Member(Box::new(expr), Box::new(property), true));
+                },
+                TokenKind::Dot => {
+                    let _ = try!(self.eat_token(TokenKind::Dot, false));
+                    let ident = try!(self.identifier_expr());
+                    expr = Spanned::new(Span::new(expr.span.start, ident.span.stop),
+                                        Expression::Member(Box::new(expr), Box::new(ident), false));
+                },
+                _ => break
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn member_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let mut expr = if next_token_is!(self, true, TokenKind::Function) {
+            try!(self.function_expression())
+        } else {
+            try!(self.primary_expression())
+        };
+
+        loop {
+            if self.peek(false).is_none() {
+                break;
+            }
+
+            match_peek! {
+                self, false,
+                TokenKind::LeftBracket => {
+                    let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
+                    let property = try!(self.expression());
+                    let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBracket, false));
+                    expr = Spanned::new(Span::new(expr.span.start, stop),
+                                        Expression::Member(Box::new(expr), Box::new(property), true));
+                },
+                TokenKind::Dot => {
+                    let _ = try!(self.eat_token(TokenKind::Dot, false));
+                    let ident = try!(self.identifier_expr());
+                    expr = Spanned::new(Span::new(expr.span.start, ident.span.stop),
+                                        Expression::Member(Box::new(expr), Box::new(ident), false));
+                },
+                _ => break
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn function_expression(&mut self) -> ParseResult<SpannedExpression> {
+        let Span { start, .. } = try!(self.eat_token(TokenKind::Function, true));
+        let ident = if next_token_is!(self, false, TokenKind::Identifier(_)) {
+            Some(try!(self.identifier()))
+        } else {
+            None
+        };
+
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        let params = if next_token_is!(self, false, TokenKind::RightParen) {
+            vec![]
+        } else {
+            try!(self.formal_parameters())
+        };
+        let _ = try!(self.eat_token(TokenKind::RightParen, false));
+        let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
+        let (prolog, body) = try!(self.function_body());
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBrace, false));
+
+        Ok(Spanned::new(Span::new(start, stop),
+                        Expression::Function(Box::new(Function {
+                            name: ident,
+                            parameters: params,
+                            prologue: prolog,
+                            body: body
+                        }))))
     }
 }
 
@@ -631,5 +1423,16 @@ mod tests {
 
         single_statement_test!(test_debugger_semi, Spanned { data: Statement::Debugger, .. }, "debugger;");
         single_statement_test!(test_debugger_no_semi, Spanned { data: Statement::Debugger, .. }, "debugger");
+
+        single_statement_test!(test_try_catch,
+                               Spanned {
+                                   data: Statement::Try(_,
+                                                        Some(CatchClause {
+                                                            ..
+                                                        }),
+                                                        None),
+                                   ..
+                               },
+                               "try { debugger; } catch (ident) { debugger; }");
     }
 }

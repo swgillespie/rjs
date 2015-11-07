@@ -56,7 +56,8 @@ pub type SpannedFunction = Spanned<Function>;
 pub struct Function {
     pub name: Option<Identifier>,
     pub parameters: Vec<SpannedPattern>,
-    pub body: SpannedStatement
+    pub prologue: Vec<SpannedStatement>,
+    pub body: Vec<SpannedStatement>
 }
 
 pub type SpannedStatement = Spanned<Statement>;
@@ -105,7 +106,7 @@ pub struct CatchClause {
 pub type SpannedDeclaration = Spanned<Declaration>;
 #[derive(Clone, PartialEq, Debug)]
 pub enum Declaration {
-    Function(Identifier, Vec<SpannedPattern>, Box<SpannedStatement>),
+    Function(Function),
     Variable(Vec<VariableDeclarator>)
 }
 

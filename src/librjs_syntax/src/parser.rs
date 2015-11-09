@@ -1,5 +1,7 @@
+use std::{f64, i64};
+use num::FromPrimitive;
 use ast::*;
-use lexer::{Lexer, Token, TokenKind, Span, Position};
+use lexer::{Lexer, Token, TokenKind, Span};
 
 pub type ParseResult<T> = Result<T, ParseError>;
 
@@ -23,18 +25,9 @@ macro_rules! span_err {
 macro_rules! span_unexpected_eof {
     () => {
         return Err(ParseError {
-            span: Span {
-                start: Position {
-                    col: 0,
-                    line: 1
-                },
-                stop: Position {
-                    col: 0,
-                    line: 1
-                }
-            },
+            span: Default::default(),
             message: "unexpected EOF".to_string(),
-            more_input: panic!("unexpected EOF")
+            more_input: true
         })
     }
 }
@@ -83,7 +76,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     pub fn parse_expression(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        self.expression()
     }
 
     pub fn parse_program(&mut self) -> ParseResult<Program> {
@@ -159,7 +152,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             }
         }
 
-        self.peek_stack.first()
+        self.peek_stack.last()
     }
 
     fn eat_semicolon(&mut self) -> ParseResult<Span> {
@@ -390,7 +383,168 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn for_statement(&mut self) -> ParseResult<SpannedStatement> {
-        unimplemented!();
+        let Span { start, .. } = try!(self.eat_token(TokenKind::For, true));
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        if next_token_is!(self, false, TokenKind::Var) {
+            let Span { start: dec_start, .. } = try!(self.eat_token(TokenKind::Var, false));
+            let mut declarations = vec![];
+            // `in` is not allowed in this production because of
+            // a potential ambiguity with the `for-in` statement
+            self.in_disallowed = true;
+            declarations.push(try!(self.variable_declaration()));
+            loop {
+                if !next_token_is!(self, false, TokenKind::Comma) {
+                    break;
+                }
+
+                let _ = try!(self.eat_token(TokenKind::Comma, false));
+                declarations.push(try!(self.variable_declaration()));
+            }
+
+            self.in_disallowed = false;
+
+            let dec_end = match declarations.last() {
+                Some(ref vardec) => match vardec.initial_value {
+                    Some(ref s) => s.span.stop,
+                    _ => vardec.id.span.stop
+                },
+                _ => unreachable!()
+            };
+
+            let dec_span = Span::new(dec_start, dec_end);
+
+            // important crossroads here - if we parsed exactly one
+            // variable declaration above, we can enter a `ForIn`
+            // production if an `in` is used instead of a semicolon.
+            // If we parsed more than one declaration, we cannot
+            // allow `in` as the next token.
+            if declarations.len() == 1 {
+                if next_token_is!(self, false, TokenKind::In) {
+                    // now we are parsing a ForIn loop in earnest.
+                    let _ = try!(self.eat_token(TokenKind::In, false));
+                    let expr = try!(self.expression());
+                    let _ = try!(self.eat_token(TokenKind::RightParen, false));
+                    let stmt = try!(self.statement());
+                    let span = Span::new(start, stmt.span.stop);
+                    let for_stmt = Statement::ForIn(
+                        ForInit::VarDec(
+                            Spanned::new(dec_span, Declaration::Variable(declarations))),
+                        expr,
+                        Box::new(stmt));
+                    return Ok(Spanned::new(span, for_stmt));
+                }
+            }
+
+            // at this point we have one or more declarations and
+            // the next token should be a semicolon.
+            // not calling `eat_semicolon` here, because that method
+            // implicitly does automatic semicolon insertion, and
+            // the spec does not allow the inserting of any of the
+            // semicolons in a `for` statement.
+            let _ = try!(self.eat_token(TokenKind::Semicolon, false));
+            let condition = if !next_token_is!(self, false, TokenKind::Semicolon) {
+                Some(try!(self.expression()))
+            } else {
+                None
+            };
+
+            let _ = try!(self.eat_token(TokenKind::Semicolon, false));
+            let action = if !next_token_is!(self, false, TokenKind::Semicolon) {
+                Some(try!(self.expression()))
+            } else {
+                None
+            };
+
+            let _ = try!(self.eat_token(TokenKind::RightParen, false));
+            let stmt = try!(self.statement());
+            let span = Span::new(start, stmt.span.stop);
+            let for_stmt = Statement::For(
+                Some(ForInit::VarDec(
+                    Spanned::new(dec_span, Declaration::Variable(declarations)))),
+                condition,
+                action,
+                Box::new(stmt));
+            return Ok(Spanned::new(span, for_stmt));
+        }
+
+        // two options here - either we are a for-loop with an init expression and
+        // no variable declarations or we are a for-in loop.
+        // in the for-in loop case, only left-hand-side expressions are permitted.
+        // to prevent catastrophic lookahead, we parse the first expression as an
+        // expression and then restrict it artificially (see assignment_expression
+        // docs for more details)
+        if next_token_is!(self, false, TokenKind::Semicolon) {
+            // this definitely can't be a for-in loop.
+            let _ = try!(self.eat_token(TokenKind::Semicolon, false));
+            let condition = if !next_token_is!(self, false, TokenKind::Semicolon) {
+                Some(try!(self.expression()))
+            } else {
+                None
+            };
+
+            let _ = try!(self.eat_token(TokenKind::Semicolon, false));
+            let action = if !next_token_is!(self, false, TokenKind::Semicolon) {
+                Some(try!(self.expression()))
+            } else {
+                None
+            };
+
+            let _ = try!(self.eat_token(TokenKind::RightParen, false));
+            let stmt = try!(self.statement());
+            let span = Span::new(start, stmt.span.stop);
+            let for_stmt = Statement::For(
+                None,
+                condition,
+                action,
+                Box::new(stmt));
+            return Ok(Spanned::new(span, for_stmt));
+        }
+
+        // we have an expression of some kind here.
+        self.in_disallowed = true;
+        let expr = try!(self.expression());
+        self.in_disallowed = false;
+        // depending on what the next token is, we restrict what expr can be.
+        if next_token_is!(self, false, TokenKind::In) {
+            let _ = try!(self.verify_assignment_lhs(expr.clone()));
+            // TODO(ES6) - in ES5 only identifiers are legal as patterns.
+            // this assumption will not be valid in ES6.
+            let _ = try!(self.eat_token(TokenKind::In, false));
+            let in_expr = try!(self.expression());
+            let _ = try!(self.eat_token(TokenKind::RightParen, false));
+            let stmt = try!(self.statement());
+            let span = Span::new(start, stmt.span.stop);
+            let for_stmt = Statement::ForIn(
+                ForInit::Expr(expr),
+                in_expr,
+                Box::new(stmt));
+            return Ok(Spanned::new(span, for_stmt));
+        }
+
+        // otherwise, it can be anything.
+        let _ = try!(self.eat_token(TokenKind::Semicolon, false));
+        let condition = if !next_token_is!(self, false, TokenKind::Semicolon) {
+            Some(try!(self.expression()))
+        } else {
+            None
+        };
+
+        let _ = try!(self.eat_token(TokenKind::Semicolon, false));
+        let action = if !next_token_is!(self, false, TokenKind::Semicolon) {
+            Some(try!(self.expression()))
+        } else {
+            None
+        };
+
+        let _ = try!(self.eat_token(TokenKind::RightParen, false));
+        let stmt = try!(self.statement());
+        let span = Span::new(start, stmt.span.stop);
+        let for_stmt = Statement::For(
+            Some(ForInit::Expr(expr)),
+            condition,
+            action,
+            Box::new(stmt));
+        return Ok(Spanned::new(span, for_stmt));
     }
 
     // in the ECMAScript 5.1 grammar, there are five "restricted" productions that place
@@ -539,6 +693,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
         match self.peek(false) {
             Some(&Token { kind: TokenKind::Colon, .. }) => (),
             _ => {
+                // the peek stack looks like this
+                // <EOS> <NOT_COLON_TOKEN>
+                //       ^----------------
+                // we want it to look like:
+                // <EOS> <IDENTIFIER> <NOT_COLON_TOKEN>
+                //       ^----------
                 // we're going to have to bail here
                 // since this is an expression statement
                 self.insert_token(Token {
@@ -732,8 +892,10 @@ impl<I: Iterator<Item=char>> Parser<I> {
             TokenKind::DecimalLiteral(_) => self.decimal_literal(),
             TokenKind::HexIntegerLiteral(_) => self.hex_integer_literal(),
             TokenKind::OctalIntegerLiteral(_) => self.octal_integer_literal(),
+            TokenKind::NullLiteral => self.null_literal(),
             TokenKind::LeftBracket => self.array_literal(),
             TokenKind::LeftBrace => self.object_literal(),
+            TokenKind::LeftParen => self.paren(),
             _ => span_err!(Default::default(), "unexpected token: {:?}", self.peek(true).unwrap())
         }
     }
@@ -744,39 +906,420 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn identifier_expr(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let ident = try!(self.identifier());
+        Ok(Spanned::new(ident.span, Expression::Identifier(ident)))
     }
 
     fn boolean_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Token { span, kind, .. } = self.next_token(true).unwrap();
+        if let TokenKind::BooleanLiteral(b) = kind {
+            let lit = Literal::Boolean(b);
+            Ok(Spanned::new(span, Expression::Literal(lit)))
+        } else {
+            unreachable!()
+        }
     }
 
     fn string_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Token { span, kind, .. } = self.next_token(true).unwrap();
+        if let TokenKind::StringLiteral(s) = kind {
+            let lit = Literal::String(s);
+            Ok(Spanned::new(span, Expression::Literal(lit)))
+        } else {
+            unreachable!()
+        }
     }
 
     fn regex_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Token { span, kind, .. } = self.next_token(true).unwrap();
+        if let TokenKind::RegularExpressionLiteral(pat, flags) = kind {
+            let lit = Literal::RegExp(pat, flags);
+            Ok(Spanned::new(span, Expression::Literal(lit)))
+        } else {
+            unreachable!()
+        }
     }
 
     fn decimal_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Token { span, kind, .. } = self.next_token(true).unwrap();
+        if let TokenKind::DecimalLiteral(str_value) = kind {
+            let value = self.decimal_mathmatical_value(&str_value);
+            Ok(Spanned::new(span, Expression::Literal(Literal::Numeric(value))))
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn decimal_mathmatical_value(&mut self, s: &str) -> f64 {
+        let dot_split : Vec<_> = s.split('.').collect();
+        if dot_split.len() == 1 {
+            // there was no dot at all. In this case this is
+            // just an integer, possibly with an exponent
+            let exponent_split : Vec<_> = s.split(|f| f == 'e' || f == 'E')
+                .collect();
+            if exponent_split.len() == 1 {
+                return self.decimal_integer_mathematical_value(s) as f64;
+            }
+
+            let base = exponent_split[0];
+            let exponent = exponent_split[1];
+            let mv = self.decimal_integer_mathematical_value(base);
+            let exp_mv = self.decimal_integer_mathematical_value(exponent);
+            let exp_value : i32 = match FromPrimitive::from_i64(exp_mv) {
+                Some(value) => value,
+                None => if exp_mv.is_positive() {
+                    return f64::INFINITY
+                } else {
+                    return 0f64
+                }
+            };
+
+            return mv as f64 * 10f64.powi(exp_value);
+        }
+
+        debug_assert!(dot_split.len() == 2);
+        let before_dot = dot_split[0];
+        let after_dot = dot_split[1];
+        if after_dot.is_empty() {
+            // literals like "10." become the MV of
+            // the string before the dot.
+            // Can also possibly have an exponent.
+
+            return self.decimal_integer_mathematical_value(before_dot) as f64;
+        }
+
+        if before_dot.is_empty() {
+            let exponent_split : Vec<_> = after_dot
+                .split(|f| f == 'e' || f == 'E')
+                .collect();
+
+            // literals like ".10" become the MV
+            // of the decimal digits.
+            if exponent_split.len() == 1 {
+                let (mv, digits) = self.decimal_digits_mathematical_value(after_dot);
+                return mv as f64 * 10f64.powi(-(digits as i32));
+            }
+
+            let digits = exponent_split[0];
+            let exponent = exponent_split[1];
+            let (mv, num_digits) = self.decimal_digits_mathematical_value(digits);
+            let exp_mv = self.decimal_integer_mathematical_value(exponent);
+
+            let exp_value : i32 = match FromPrimitive::from_i64(exp_mv - num_digits as i64) {
+                Some(value) => value,
+                None => if exp_mv.is_positive() {
+                    return f64::INFINITY
+                } else {
+                    return 0f64
+                }
+            };
+
+            return mv as f64 * 10f64.powi(-exp_value);
+        }
+
+        // next, we have to check for exponents.
+        // our string has been partitioned like this so far:
+        // 101949.23828e39
+        // [----] [------]
+        let exponent_split : Vec<_> = after_dot
+            .split(|f| f == 'e' || f == 'E')
+            .collect();
+        if exponent_split.len() == 1 {
+            // in this case, there's no exponent.
+            let dmv = self.decimal_integer_mathematical_value(before_dot);
+            let (after_mv, num_digits) = self.decimal_digits_mathematical_value(after_dot);
+            return dmv as f64 + (after_mv as f64 * 10f64.powi(-(num_digits as i32)));
+        }
+
+        debug_assert!(exponent_split.len() == 2);
+        let digits = exponent_split[0];
+        let exponent = exponent_split[1];
+        let dmv = self.decimal_integer_mathematical_value(before_dot);
+        let exp_mv = self.decimal_integer_mathematical_value(exponent);
+
+        // SPEC_NOTE: the spec does not specify what happens when the
+        // MV of an exponent is too huge. For really huge exponents,
+        // v8 reports Infinity and for very small ones it reports 0,
+        // so I'll do the same.
+        let exp_value : i32 = match FromPrimitive::from_i64(exp_mv) {
+            Some(value) => value,
+            None => if exp_mv.is_positive() {
+                return f64::INFINITY
+            } else {
+                return 0f64
+            }
+        };
+
+        if digits.is_empty() {
+            return dmv as f64 * 10f64.powi(exp_value);
+        }
+
+        // now we've partitioned into this:
+        // 101949.23828e39
+        // [----] [---] []
+        let (digit_mv, num_digits) = self.decimal_digits_mathematical_value(digits);
+        return (dmv as f64 + (digit_mv as f64 * 10f64.powi(-(num_digits as i32)))) * 10f64.powi(exp_value);
+    }
+
+    fn decimal_integer_mathematical_value(&mut self, s: &str) -> i64 {
+        // this is pretty straightforward integer parsing.
+        i64::from_str_radix(s, 10).expect("string can't be parsed as an i64 but made it this far?")
+    }
+
+    fn decimal_digits_mathematical_value(&mut self, s: &str) -> (i64, usize) {
+        // this is also pretty straightforward int parsing, except
+        // we have to keep track of how long the original string was.
+        (i64::from_str_radix(s, 10).expect("string can't be parsed as an i64 but made it this far?"), s.len())
     }
 
     fn hex_integer_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Token { span, kind, .. } = self.next_token(true).unwrap();
+        if let TokenKind::HexIntegerLiteral(str_value) = kind {
+            let value = self.hex_mathematical_value(&str_value);
+            Ok(Spanned::new(span, Expression::Literal(Literal::Numeric(value))))
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn hex_mathematical_value(&mut self, s: &str) -> f64 {
+        // by convention, the lexer produces the hex literal with the "0x"
+        // still on it.
+        i64::from_str_radix(&s[2..], 16).expect("invalid hex literal?") as f64
     }
 
     fn octal_integer_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Token { span, kind, .. } = self.next_token(true).unwrap();
+        if self.strict_mode {
+            span_err!(span, "octal literals are not permitted in strict mode")
+        }
+
+        if let TokenKind::OctalIntegerLiteral(str_value) = kind {
+            let value = self.octal_mathematical_value(&str_value);
+            Ok(Spanned::new(span, Expression::Literal(Literal::Numeric(value))))
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn octal_mathematical_value(&mut self, s: &str) -> f64 {
+        // by convention, the lexer produces the octal literal with the
+        // leading zero still on it.
+        i64::from_str_radix(&s[1..], 8).expect("invalid octal literal?") as f64
+    }
+
+    fn null_literal(&mut self) -> ParseResult<SpannedExpression> {
+        let span = try!(self.eat_token(TokenKind::NullLiteral, true));
+        Ok(Spanned::new(span, Expression::Literal(Literal::Null)))
     }
 
     fn array_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Span { start, .. } = try!(self.eat_token(TokenKind::LeftBracket, true));
+        let mut exprs = vec![];
+        loop {
+            if next_token_is!(self, false, TokenKind::RightBracket) {
+                break;
+            }
+
+            if next_token_is!(self, false, TokenKind::Comma) {
+                // commas indicate the "Elison" production.
+                let _ = try!(self.eat_token(TokenKind::Comma, false));
+                exprs.push(None);
+            } else {
+                exprs.push(Some(try!(self.assignment_expression())));
+                if !next_token_is!(self, false, TokenKind::RightBracket) {
+                    // SPEC_NOTE: this is sorta weird. Things such as
+                    // "[42,]" get parsed as a single-element array,
+                    // by v8 and esprima, while the spec makes it seem like
+                    // it should be a 42 followed by an elison.
+                    let _ = try!(self.eat_token(TokenKind::Comma, false));
+                }
+            }
+        }
+
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBracket, false));
+        Ok(Spanned::new(Span::new(start, stop), Expression::Array(exprs)))
     }
 
     fn object_literal(&mut self) -> ParseResult<SpannedExpression> {
-        unimplemented!()
+        let Span { start, .. } = try!(self.eat_token(TokenKind::LeftBrace, true));
+        let mut properties = vec![];
+        loop {
+            if next_token_is!(self, false, TokenKind::RightBrace) {
+                break;
+            }
+
+            properties.push(try!(self.property()));
+
+            // the spec explicitly permits a trailing comma
+            // after the final property in an object literal.
+            // if it's there, eat it. If it's not, break.
+            if next_token_is!(self, false, TokenKind::Comma) {
+                let _ = try!(self.eat_token(TokenKind::Comma, false));
+            } else {
+                break;
+            }
+        }
+
+        // we are now looking at either a } or a ,}.
+        if next_token_is!(self, false, TokenKind::Comma) {
+            let _ = try!(self.eat_token(TokenKind::Comma, false));
+        }
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBrace, false));
+        Ok(Spanned::new(Span::new(start, stop), Expression::Object(properties)))
+    }
+
+    fn paren(&mut self) -> ParseResult<SpannedExpression> {
+        let Span { start, .. } = try!(self.eat_token(TokenKind::LeftParen, true));
+        let mut expr = try!(self.expression());
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, true));
+        expr.span = Span::new(start, stop);
+        Ok(expr)
+    }
+
+    fn property(&mut self) -> ParseResult<Property> {
+        // if we see a special identifier "get" or an identifier "set",
+        // we have to parse these differently
+
+        // ugly hack this sucks: rust's mutability checking
+        // can not handle what we'd like to do here...
+        let property_kind = match self.peek(false) {
+            Some(&Token { kind: TokenKind::Identifier(ref p), .. }) if p == "get" => PropertyKind::Get,
+            Some(&Token { kind: TokenKind::Identifier(ref p), .. }) if p == "set" => PropertyKind::Set,
+            _ => PropertyKind::Init
+        };
+
+        match property_kind {
+            PropertyKind::Get => return self.property_get(),
+            PropertyKind::Set => return self.property_set(),
+            PropertyKind::Init => return self.property_init()
+        }
+    }
+
+    fn property_init(&mut self) -> ParseResult<Property> {
+        // otherwise, we're parsing a normal property
+        let name = try!(self.property_name());
+        let _ = try!(self.eat_token(TokenKind::Colon, false));
+        let expr = try!(self.assignment_expression());
+        Ok(Property {
+            key: name,
+            value: Box::new(expr),
+            kind: PropertyKind::Init
+        })
+    }
+
+    fn property_get(&mut self) -> ParseResult<Property> {
+        // we're looking at the special identifier "get"
+        let ident = try!(self.identifier());
+        if next_token_is!(self, false, TokenKind::Colon) {
+            // this grammar's LL(2)-ness strikes again...
+            // bail to the property_init production if someone
+            // defined a property named "get"
+            self.insert_token(Token {
+                span: ident.span,
+                kind: TokenKind::Identifier(ident.data),
+                preceded_by_newline: false
+            });
+
+            return self.property_init();
+        }
+
+        let name = try!(self.property_name());
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        let _ = try!(self.eat_token(TokenKind::RightParen, false));
+        let Span { start, .. } = try!(self.eat_token(TokenKind::LeftBrace, false));
+        let (prolog, body) = try!(self.function_body());
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBrace, false));
+        let expr = Expression::Function(Box::new(Function {
+            name: None,
+            parameters: vec![],
+            prologue: prolog,
+            body: body
+        }));
+        Ok(Property {
+            key: name,
+            value: Box::new(Spanned::new(Span::new(start, stop), expr)),
+            kind: PropertyKind::Get
+        })
+    }
+
+    fn property_set(&mut self) -> ParseResult<Property> {
+        let ident = try!(self.identifier());
+        if next_token_is!(self, false, TokenKind::Colon) {
+            // this grammar's LL(2)-ness strikes again...
+            // bail to the property_init production if someone
+            // defined a property named "get"
+            self.insert_token(Token {
+                span: ident.span,
+                kind: TokenKind::Identifier(ident.data),
+                preceded_by_newline: false
+            });
+
+            return self.property_init();
+        }
+
+        let name = try!(self.property_name());
+        let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+        let param = try!(self.identifier());
+        let _ = try!(self.eat_token(TokenKind::RightParen, false));
+        let Span { start, .. } = try!(self.eat_token(TokenKind::LeftBrace, false));
+        let (prolog, body) = try!(self.function_body());
+        let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBrace, false));
+        let expr = Expression::Function(Box::new(Function {
+            name: None,
+            parameters: vec![Spanned::new(param.span, Pattern::Identifier(param))],
+            prologue: prolog,
+            body: body
+        }));
+        Ok(Property {
+            key: name,
+            value: Box::new(Spanned::new(Span::new(start, stop), expr)),
+            kind: PropertyKind::Set
+        })
+    }
+
+    fn property_name(&mut self) -> ParseResult<LiteralOrIdentifier> {
+        if next_token_is!(self, false, TokenKind::Identifier(_)) {
+            let ident = try!(self.identifier());
+            return Ok(LiteralOrIdentifier::Identifier(ident))
+        }
+
+        if next_token_is!(self, false, TokenKind::StringLiteral(_)) {
+            let Token { span, kind, .. } = self.next_token(false).unwrap();
+            if let TokenKind::StringLiteral(s) = kind {
+                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::String(s))))
+            } else {
+                unreachable!()
+            }
+        }
+
+        if next_token_is!(self, false, TokenKind::DecimalLiteral(_)) {
+            let Token { span, kind, .. } = self.next_token(false).unwrap();
+            if let TokenKind::DecimalLiteral(s) = kind {
+                let value = self.decimal_mathmatical_value(&s);
+                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))))
+            } else {
+                unreachable!()
+            }
+        }
+
+        if next_token_is!(self, false, TokenKind::HexIntegerLiteral(_)) {
+            let Token { span, kind, .. } = self.next_token(false).unwrap();
+            if let TokenKind::HexIntegerLiteral(s) = kind {
+                let value = self.hex_mathematical_value(&s);
+                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))))
+            } else {
+                unreachable!()
+            }
+        }
+
+        let Token { span, kind, .. } = self.next_token(false).unwrap();
+        if let TokenKind::OctalIntegerLiteral(s) = kind {
+            let value = self.octal_mathematical_value(&s);
+            return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))))
+        } else {
+            span_err!(span, "invalid name for property: {:#?}", kind);
+        }
     }
 
     fn expression(&mut self) -> ParseResult<SpannedExpression> {
@@ -888,7 +1431,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn conditional_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.logical_or_expression());
-        if next_token_is!(self, false, TokenKind::QuestionMark) {
+        if next_token_is!(self, true, TokenKind::QuestionMark) {
             // ternary operator
             let _ = try!(self.eat_token(TokenKind::QuestionMark, false));
             let true_expr = try!(self.assignment_expression());
@@ -906,9 +1449,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn logical_or_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.logical_and_expression());
-        if next_token_is!(self, false, TokenKind::LogicalOr) {
+        if next_token_is!(self, true, TokenKind::LogicalOr) {
             let _ = try!(self.eat_token(TokenKind::LogicalOr, false));
-            let rhs = try!(self.logical_and_expression());
+            let rhs = try!(self.logical_or_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Logical(LogicalOperator::Or, Box::new(expr), Box::new(rhs))))
@@ -920,9 +1463,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn logical_and_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.bitwise_or_expression());
-        if next_token_is!(self, false, TokenKind::LogicalAnd) {
+        if next_token_is!(self, true, TokenKind::LogicalAnd) {
             let _ = try!(self.eat_token(TokenKind::LogicalAnd, false));
-            let rhs = try!(self.bitwise_or_expression());
+            let rhs = try!(self.logical_and_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Logical(LogicalOperator::And, Box::new(expr), Box::new(rhs))))
@@ -933,9 +1476,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn bitwise_or_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.bitwise_xor_expression());
-        if next_token_is!(self, false, TokenKind::BitwiseOr) {
+        if next_token_is!(self, true, TokenKind::BitwiseOr) {
             let _ = try!(self.eat_token(TokenKind::BitwiseOr, false));
-            let rhs = try!(self.bitwise_xor_expression());
+            let rhs = try!(self.bitwise_or_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(BinaryOperator::BitwiseOr, Box::new(expr), Box::new(rhs))))
@@ -946,9 +1489,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn bitwise_xor_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.bitwise_and_expression());
-        if next_token_is!(self, false, TokenKind::BitwiseXor) {
+        if next_token_is!(self, true, TokenKind::BitwiseXor) {
             let _ = try!(self.eat_token(TokenKind::BitwiseXor, false));
-            let rhs = try!(self.bitwise_and_expression());
+            let rhs = try!(self.bitwise_xor_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(BinaryOperator::BitwiseXor, Box::new(expr), Box::new(rhs))))
@@ -959,9 +1502,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn bitwise_and_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.equality_expression());
-        if next_token_is!(self, false, TokenKind::BitwiseAnd) {
+        if next_token_is!(self, true, TokenKind::BitwiseAnd) {
             let _ = try!(self.eat_token(TokenKind::BitwiseAnd, false));
-            let rhs = try!(self.equality_expression());
+            let rhs = try!(self.bitwise_and_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(BinaryOperator::BitwiseAnd, Box::new(expr), Box::new(rhs))))
@@ -972,12 +1515,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn equality_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.relational_expression());
-        if next_token_is!(self, false, TokenKind::DoubleEqual,
+        if next_token_is!(self, true, TokenKind::DoubleEqual,
                           TokenKind::DoubleNotEqual,
                           TokenKind::TripleEqual,
                           TokenKind::TripleNotEqual) {
             let kind = try!(self.eat_equality_operator());
-            let rhs = try!(self.relational_expression());
+            let rhs = try!(self.equality_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
@@ -1002,19 +1545,19 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn relational_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.shift_expression());
-        if next_token_is!(self, false, TokenKind::LessThan,
+        if next_token_is!(self, true, TokenKind::LessThan,
                           TokenKind::LessThanEqual,
                           TokenKind::GreaterThan,
                           TokenKind::GreaterThanEqual,
                           TokenKind::InstanceOf) {
             let kind = try!(self.eat_relational_operator());
-            let rhs = try!(self.shift_expression());
+            let rhs = try!(self.relational_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
         } else if !self.in_disallowed && next_token_is!(self, false, TokenKind::In) {
             let _ = try!(self.eat_token(TokenKind::In, false));
-            let rhs = try!(self.shift_expression());
+            let rhs = try!(self.relational_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(BinaryOperator::In, Box::new(expr), Box::new(rhs))))
@@ -1040,11 +1583,11 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn shift_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.additive_expression());
-        if next_token_is!(self, false, TokenKind::LeftShift,
+        if next_token_is!(self, true, TokenKind::LeftShift,
                           TokenKind::RightShift,
                           TokenKind::TripleRightShift) {
             let kind = try!(self.eat_shift_operator());
-            let rhs = try!(self.additive_expression());
+            let rhs = try!(self.shift_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
@@ -1068,10 +1611,10 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn additive_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.multiplicative_expression());
-        if next_token_is!(self, false, TokenKind::Plus,
+        if next_token_is!(self, true, TokenKind::Plus,
                           TokenKind::Minus) {
             let kind = try!(self.eat_additive_operator());
-            let rhs = try!(self.multiplicative_expression());
+            let rhs = try!(self.additive_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
@@ -1094,11 +1637,11 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn multiplicative_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.unary_expression());
-        if next_token_is!(self, false, TokenKind::Star,
+        if next_token_is!(self, true, TokenKind::Star,
                           TokenKind::Div,
                           TokenKind::Percent) {
             let kind = try!(self.eat_multiplicative_operator());
-            let rhs = try!(self.unary_expression());
+            let rhs = try!(self.multiplicative_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
                             Expression::Binary(kind, Box::new(expr), Box::new(rhs))))
@@ -1121,24 +1664,41 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn unary_expression(&mut self) -> ParseResult<SpannedExpression> {
-        if next_token_is!(self, false, TokenKind::Delete,
+        if next_token_is!(self, true, TokenKind::Delete,
                           TokenKind::Void,
                           TokenKind::TypeOf,
-                          TokenKind::DoublePlus,
-                          TokenKind::DoubleMinus,
                           TokenKind::Plus,
                           TokenKind::Minus,
                           TokenKind::BitwiseNot,
                           TokenKind::LogicalNot) {
-            // TODO DoublePlus and DoubleMinus are update operators
             let kind = try!(self.eat_unary_operator());
             let kind_span = self.last_span;
             let expr = Box::new(try!(self.unary_expression()));
             let span = Span::new(kind_span.start, expr.span.stop);
             Ok(Spanned::new(span, Expression::Unary(kind, true, expr)))
-        } else {
+        } else if next_token_is!(self, true, TokenKind::DoublePlus,
+                                 TokenKind::DoubleMinus) {
+            let kind = try!(self.eat_update_operator());
+            let kind_span = self.last_span;
+            let expr = Box::new(try!(self.unary_expression()));
+            let span = Span::new(kind_span.start, expr.span.stop);
+            Ok(Spanned::new(span, Expression::Update(kind, true, expr)))
+        }
+        else {
             self.postfix_expression()
         }
+    }
+
+    fn eat_update_operator(&mut self) -> ParseResult<UpdateOperator> {
+        let kind = match_peek! {
+            self, false,
+            TokenKind::DoublePlus => UpdateOperator::Increment,
+            TokenKind::DoubleMinus => UpdateOperator::Decrement,
+            _ => unreachable!()
+        };
+
+        self.next_token(false).unwrap();
+        Ok(kind)
     }
 
     fn eat_unary_operator(&mut self) -> ParseResult<UnaryOperator> {
@@ -1147,8 +1707,6 @@ impl<I: Iterator<Item=char>> Parser<I> {
             TokenKind::Delete => UnaryOperator::Delete,
             TokenKind::Void => UnaryOperator::Void,
             TokenKind::TypeOf => UnaryOperator::Typeof,
-            TokenKind::DoublePlus => unimplemented!(),
-            TokenKind::DoubleMinus => unimplemented!(),
             TokenKind::Plus => UnaryOperator::Plus,
             TokenKind::Minus => UnaryOperator::Minus,
             TokenKind::BitwiseNot => UnaryOperator::BitwiseNot,
@@ -1162,9 +1720,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn postfix_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.left_hand_side_expression());
-        if next_token_is!(self, false, TokenKind::DoublePlus,
+        if next_token_is!(self, true, TokenKind::DoublePlus,
                           TokenKind::DoubleMinus) {
-            let token = self.next_token(false).unwrap();
+            let token = self.next_token(true).unwrap();
             // this is a restricted production. If this token is
             // preceded by a newline, we have to insert a semicolon
             // and backtrack.
@@ -1198,22 +1756,62 @@ impl<I: Iterator<Item=char>> Parser<I> {
     // avoid separating the logic that parses new calls.
     fn new_expression(&mut self) -> ParseResult<SpannedExpression> {
         let Span { start, .. } = try!(self.eat_token(TokenKind::New, true));
-        if next_token_is!(self, true, TokenKind::New) {
+        let mut expr = if next_token_is!(self, true, TokenKind::New) {
             let new_expr = try!(self.new_expression());
             let span = Span::new(start, new_expr.span.stop);
-            Ok(Spanned::new(span, Expression::New(Box::new(new_expr), vec![])))
+            Spanned::new(span, Expression::New(Box::new(new_expr), vec![]))
         } else {
             let member = try!(self.member_expression());
-            let _ = try!(self.eat_token(TokenKind::LeftParen, false));
-            let args = try!(self.actual_parameters());
-            let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
-            Ok(Spanned::new(Span::new(start, stop),
-                            Expression::New(Box::new(member), args)))
+            if next_token_is!(self, false, TokenKind::LeftParen) {
+                let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+                let args = try!(self.actual_parameters());
+                let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
+                Spanned::new(Span::new(start, stop),
+                                Expression::New(Box::new(member), args))
+            } else {
+                // it's not required for a new expression to have arguments.
+                let span = Span::new(start, member.span.stop);
+                Spanned::new(span, Expression::New(Box::new(member), vec![]))
+            }
+        };
+
+        // parse potentially chained calls
+        loop {
+            if self.peek(false).is_none() {
+                break;
+            }
+
+            match_peek! {
+                self, false,
+                TokenKind::LeftParen => {
+                    let _ = try!(self.eat_token(TokenKind::LeftParen, false));
+                    let args = try!(self.actual_parameters());
+                    let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
+                    expr = Spanned::new(Span::new(expr.span.start, stop),
+                                        Expression::Call(Box::new(expr), args));
+                },
+                TokenKind::LeftBracket => {
+                    let _ = try!(self.eat_token(TokenKind::LeftBracket, false));
+                    let property = try!(self.expression());
+                    let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBracket, false));
+                    expr = Spanned::new(Span::new(expr.span.start, stop),
+                                        Expression::Member(Box::new(expr), Box::new(property), true));
+                },
+                TokenKind::Dot => {
+                    let _ = try!(self.eat_token(TokenKind::Dot, false));
+                    let ident = try!(self.identifier_expr());
+                    expr = Spanned::new(Span::new(expr.span.start, ident.span.stop),
+                                        Expression::Member(Box::new(expr), Box::new(ident), false));
+                },
+                _ => break
+            }
         }
+
+        Ok(expr)
     }
 
     fn actual_parameters(&mut self) -> ParseResult<Vec<SpannedExpression>> {
-        if next_token_is!(self, false, TokenKind::RightParen) {
+        if next_token_is!(self, true, TokenKind::RightParen) {
             return Ok(vec![])
         }
 
@@ -1221,7 +1819,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         loop {
             parameters.push(try!(self.assignment_expression()));
 
-            if next_token_is!(self, false, TokenKind::RightParen) {
+            if next_token_is!(self, true, TokenKind::RightParen) {
                 break;
             }
 
@@ -1261,7 +1859,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                                         Expression::Call(Box::new(expr), args));
                 },
                 TokenKind::LeftBracket => {
-                    let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
+                    let _ = try!(self.eat_token(TokenKind::LeftBracket, false));
                     let property = try!(self.expression());
                     let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBracket, false));
                     expr = Spanned::new(Span::new(expr.span.start, stop),
@@ -1295,7 +1893,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             match_peek! {
                 self, false,
                 TokenKind::LeftBracket => {
-                    let _ = try!(self.eat_token(TokenKind::LeftBrace, false));
+                    let _ = try!(self.eat_token(TokenKind::LeftBracket, false));
                     let property = try!(self.expression());
                     let Span { stop, .. } = try!(self.eat_token(TokenKind::RightBracket, false));
                     expr = Spanned::new(Span::new(expr.span.start, stop),

@@ -1,6 +1,7 @@
 extern crate itertools;
 extern crate phf;
 extern crate unicode_categories;
+extern crate num;
 
 mod lexer;
 mod char_classes;

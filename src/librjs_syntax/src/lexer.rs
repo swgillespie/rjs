@@ -1,6 +1,7 @@
 use phf;
 use itertools::PutBackN;
 use std::char;
+use std::default::Default;
 use char_classes::CharClassExt;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
@@ -9,10 +10,19 @@ pub struct Span {
     pub stop: Position
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Position {
     pub col: u32,
     pub line: u32
+}
+
+impl Default for Position {
+    fn default() -> Position {
+        Position {
+            col: 0,
+            line: 1
+        }
+    }
 }
 
 impl Span {
@@ -162,7 +172,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
     pub fn new(iter: I) -> Lexer<I> {
         Lexer {
             position_col: 0,
-            position_line: 0,
+            position_line: 1,
             stream: PutBackN::new(iter),
             prev_token_was_newline: false
         }
@@ -217,7 +227,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     line: self.position_line
                 },
                 stop: Position {
-                    col: self.position_col,
+                    col: self.position_col + 1,
                     line: self.position_line
                 }
             },
@@ -225,7 +235,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             preceded_by_newline: self.prev_token_was_newline
         };
 
-        self.position_col += 1;
+        //self.position_col += 1;
         self.advance();
         Some(tok)
     }
@@ -297,8 +307,6 @@ impl<I: Iterator<Item=char>> Lexer<I> {
     fn new_token_of_length(&mut self, kind: TokenKind, len: u32) -> Token {
         // the contract is that the input stream has been advanced to the final character
         // of this token. Therefore, the start position is self.current_col - len.
-        // YOU SHOULD NOT USE THIS to report the Line Separator token, as the span calculation
-        // is different in that case.
         Token {
             span: Span {
                 start: Position {
@@ -306,7 +314,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     line: self.position_line
                 },
                 stop: Position {
-                    col: self.position_col - 1,
+                    col: self.position_col,
                     line: self.position_line
                 }
             },
@@ -841,6 +849,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             self.advance();
         }
 
+        if buffer.len() == 1 {
+            // this is just a zero - parse it as a decimal literal
+            still_in_octal_mode = false;
+        }
+
         if still_in_octal_mode {
             self.new_token_of_length(TokenKind::OctalIntegerLiteral(buffer.clone()), buffer.len() as u32)
         } else {
@@ -1104,7 +1117,7 @@ mod tests {
                 assert_eq!(kind, token);
                 assert_eq!(span.start.col, 0);
                 assert_eq!(span.start.line, 0);
-                assert_eq!(span.stop.col, (string.len() as u32) -1);
+                assert_eq!(span.stop.col, (string.len() as u32));
                 assert_eq!(span.stop.line, 0);
             }
             _ => panic!("unexpected token value: {:?}, expected: {:?}", found_token, token)

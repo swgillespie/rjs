@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 extern crate itertools;
 extern crate phf;
 extern crate unicode_categories;
@@ -17,4 +19,5 @@ pub use self::lexer::Span;
 pub use self::parser::Parser;
 pub use self::parser::ParseError;
 pub use self::parser::ParseResult;
+pub use self::visitor::Visitor;
 

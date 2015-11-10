@@ -1,10 +1,12 @@
 [package]
-name = "librjs"
+name = "librjs_runtime"
 version = "0.1.0"
 authors = ["swgillespie <sean.william.g@gmail.com>"]
 
 [dependencies.librjs_syntax]
 path = "../librjs_syntax"
 
-[dependencies.librjs_runtime]
-path = "../librjs_runtime"
+[dependencies]
+bit-set = "0.2.0"
+bit-vec = "0.4.2"
+log = "0.3.3"

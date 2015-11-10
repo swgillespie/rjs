@@ -6,6 +6,7 @@ extern crate num;
 mod lexer;
 mod char_classes;
 mod parser;
+mod visitor;
 pub mod ast;
 
 

@@ -93,8 +93,7 @@ pub struct SwitchCase {
 #[derive(Clone, PartialEq, Debug)]
 pub enum ForInit {
     VarDec(SpannedDeclaration),
-    Expr(SpannedExpression),
-    None
+    Expr(SpannedExpression)
 }
 
 #[derive(Clone, PartialEq, Debug)]

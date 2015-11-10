@@ -1167,9 +1167,9 @@ mod tests {
             Some(Token { kind, span, .. } ) => {
                 assert_eq!(kind, token);
                 assert_eq!(span.start.col, 0);
-                assert_eq!(span.start.line, 0);
+                assert_eq!(span.start.line, 1);
                 assert_eq!(span.stop.col, (string.len() as u32));
-                assert_eq!(span.stop.line, 0);
+                assert_eq!(span.stop.line, 1);
             }
             _ => panic!("unexpected token value: {:?}, expected: {:?}", found_token, token)
         }

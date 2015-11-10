@@ -449,7 +449,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             };
 
             let _ = try!(self.eat_token(TokenKind::Semicolon, false));
-            let action = if !next_token_is!(self, false, TokenKind::Semicolon) {
+            let action = if !next_token_is!(self, false, TokenKind::RightParen) {
                 Some(try!(self.expression()))
             } else {
                 None
@@ -483,7 +483,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             };
 
             let _ = try!(self.eat_token(TokenKind::Semicolon, false));
-            let action = if !next_token_is!(self, false, TokenKind::Semicolon) {
+            let action = if !next_token_is!(self, false, TokenKind::RightParen) {
                 Some(try!(self.expression()))
             } else {
                 None
@@ -530,7 +530,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         };
 
         let _ = try!(self.eat_token(TokenKind::Semicolon, false));
-        let action = if !next_token_is!(self, false, TokenKind::Semicolon) {
+        let action = if !next_token_is!(self, false, TokenKind::RightParen) {
             Some(try!(self.expression()))
         } else {
             None
@@ -563,7 +563,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let identifier = if next_token_is!(self, false, TokenKind::Identifier(_)) {
             // this is a restricted production. if the next token is a newline,
             // we have to insert a semicolon and end this statement.
-            if self.next_token_preceded_by_newline() {
+            if self.next_token_preceded_by_newline() || next_token_is!(self, true, TokenKind::RightBrace) {
                 self.insert_semicolon();
                 None
             } else {
@@ -580,7 +580,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
     fn break_statement(&mut self) -> ParseResult<SpannedStatement> {
         let Span { start, .. } = try!(self.eat_token(TokenKind::Break, true));
         let identifier = if next_token_is!(self, false, TokenKind::Identifier(_)) {
-            if self.next_token_preceded_by_newline() {
+            if self.next_token_preceded_by_newline() || next_token_is!(self, true, TokenKind::RightBrace) {
                 self.insert_semicolon();
                 None
             } else {
@@ -596,8 +596,10 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn return_statement(&mut self) -> ParseResult<SpannedStatement> {
         let Span { start, .. } = try!(self.eat_token(TokenKind::Return, true));
-        let expr = if !next_token_is!(self, false, TokenKind::Semicolon) {
-            if self.next_token_preceded_by_newline() {
+        let expr = if !next_token_is!(self, true, TokenKind::Semicolon) {
+            // if our next token is not a semicolon, we have to try to ascertain
+            // what it is.
+            if self.next_token_preceded_by_newline() || next_token_is!(self, true, TokenKind::RightBrace) {
                 self.insert_semicolon();
                 None
             } else {
@@ -900,6 +902,26 @@ impl<I: Iterator<Item=char>> Parser<I> {
         }
     }
 
+    fn identifier_or_keyword(&mut self) -> ParseResult<SpannedExpression> {
+        // SPEC_NOTE: the spec is not clear on this, but it's actually
+        // legal to use a keyword as an identifier as long as that
+        // identifier is part of a member statement (i.e. this.continue())
+        let token = match self.next_token(false) {
+            Some(tok) => tok,
+            None => span_unexpected_eof!()
+        };
+
+        self.last_span = token.span;
+
+        let as_identifier = match token.as_identifier() {
+            Some(Token { kind: TokenKind::Identifier(ref data) , .. }) => data.clone(),
+            _ => span_err!(token.span, "unexpected token: expected an identifier, got {:?}", token.kind)
+        };
+
+        let ident = Spanned::new(token.span, as_identifier);
+        Ok(Spanned::new(ident.span, Expression::Identifier(ident)))
+    }
+
     fn this(&mut self) -> ParseResult<SpannedExpression> {
         let span = try!(self.eat_token(TokenKind::This, false));
         Ok(Spanned::new(span, Expression::This))
@@ -1063,7 +1085,13 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn decimal_integer_mathematical_value(&mut self, s: &str) -> i64 {
         // this is pretty straightforward integer parsing.
-        i64::from_str_radix(s, 10).expect("string can't be parsed as an i64 but made it this far?")
+        if s.chars().next().unwrap() == '+' {
+            // from_str_radix does not like a leading plus. The number is going
+            // to be positive anyway, so get rid of it.
+            i64::from_str_radix(&s[1..], 10).expect("string can't be parsed as an i64 but made it this far?")
+        } else {
+            i64::from_str_radix(s, 10).expect("string can't be parsed as an i64 but made it this far?")
+        }
     }
 
     fn decimal_digits_mathematical_value(&mut self, s: &str) -> (i64, usize) {
@@ -1799,7 +1827,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                 },
                 TokenKind::Dot => {
                     let _ = try!(self.eat_token(TokenKind::Dot, false));
-                    let ident = try!(self.identifier_expr());
+                    let ident = try!(self.identifier_or_keyword());
                     expr = Spanned::new(Span::new(expr.span.start, ident.span.stop),
                                         Expression::Member(Box::new(expr), Box::new(ident), false));
                 },
@@ -1867,7 +1895,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                 },
                 TokenKind::Dot => {
                     let _ = try!(self.eat_token(TokenKind::Dot, false));
-                    let ident = try!(self.identifier_expr());
+                    let ident = try!(self.identifier_or_keyword());
                     expr = Spanned::new(Span::new(expr.span.start, ident.span.stop),
                                         Expression::Member(Box::new(expr), Box::new(ident), false));
                 },
@@ -1901,7 +1929,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                 },
                 TokenKind::Dot => {
                     let _ = try!(self.eat_token(TokenKind::Dot, false));
-                    let ident = try!(self.identifier_expr());
+                    let ident = try!(self.identifier_or_keyword());
                     expr = Spanned::new(Span::new(expr.span.start, ident.span.stop),
                                         Expression::Member(Box::new(expr), Box::new(ident), false));
                 },

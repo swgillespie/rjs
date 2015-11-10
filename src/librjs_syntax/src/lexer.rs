@@ -48,6 +48,57 @@ impl Token {
             _ => false
         }
     }
+
+    pub fn as_identifier(&self) -> Option<Token> {
+        let string = match self.kind {
+            // trivial case of converting an identifier
+            TokenKind::Identifier(_) => return Some(self.clone()),
+            TokenKind::FutureReservedWordStrict(s) => s,
+            // this is kinda iffy, but it has to be done...
+            // thanks to emacs macros!
+            TokenKind::Break => "break",
+            TokenKind::Do => "do",
+            TokenKind::InstanceOf => "instanceof",
+            TokenKind::TypeOf => "typeof",
+            TokenKind::Case => "case",
+            TokenKind::Else => "else",
+            TokenKind::New => "new",
+            TokenKind::Var => "var",
+            TokenKind::Catch => "catch",
+            TokenKind::Finally => "finally",
+            TokenKind::Return => "return",
+            TokenKind::Void => "void",
+            TokenKind::Continue => "continue",
+            TokenKind::For => "for",
+            TokenKind::Switch => "switch",
+            TokenKind::While => "while",
+            TokenKind::Debugger => "debugger",
+            TokenKind::Function => "function",
+            TokenKind::This => "this",
+            TokenKind::With => "with",
+            TokenKind::Default => "default",
+            TokenKind::If => "if",
+            TokenKind::Throw => "throw",
+            TokenKind::Delete => "delete",
+            TokenKind::In => "in",
+            TokenKind::Try => "try",
+            TokenKind::Class => "class",
+            TokenKind::Enum => "enum",
+            TokenKind::Extends => "extends",
+            TokenKind::Super => "super",
+            TokenKind::Const => "const",
+            TokenKind::Export => "export",
+            TokenKind::Import => "import",
+            // other things can't be converted to an identifier
+            _ => return None
+        };
+
+        Some(Token {
+            span: self.span,
+            kind: TokenKind::Identifier(string.to_string()),
+            preceded_by_newline: self.preceded_by_newline
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

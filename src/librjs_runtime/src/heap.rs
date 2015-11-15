@@ -26,7 +26,7 @@
 //! The managed heap is partitioned into multiple Arenas, each of
 //! which is composed of multiple segments. Today, the heap is
 //! partitioned by ECMAScript types that must be allocated
-//! on the heap: Strings and Objects. 
+//! on the heap: Strings and Objects.
 //!
 //! Each arena maintains a list of segments. Whenever an arena
 //! is asked to allocate (through the `allocate` method), it will
@@ -43,7 +43,7 @@
 //! A segment is a collection of locations that the allocator is
 //! free to use for ECMAScript objects. Each segment has a fixed
 //! size, which means that it is not always possible to allocate
-//! on a segment. When a segment contains no objects, it is
+//! on a segment. When a  contains no objects, it is
 //! deallocated by the arena that owns it.
 //!
 //! ### GC Smart Pointers
@@ -79,6 +79,18 @@
 //! implementation of that object to obtain a list of all pointers that
 //! object contains, which it will traverse.
 //!
+//! ### Aliasing Mutable Memory
+//! There is nothing Rust abhors more than aliased, mutable memory.
+//! This poses a problem for our garbage collection scheme, since
+//! `GcPtr<T>` implements Copy and also implements DerefMut. By
+//! simply copying the pointer and dereferencing it twice, we obtain
+//! two mutable references to the same memory slot, which is undefined behavior.
+//!
+//! In order to combat this problem, each heap slot is placed in a `RefCell`.
+//! It is legal to alias a RefCell, as it enforces the borrow checker's rules at runtime.
+//! If an attempt is made to mutably borrow a GC cell twice, the result
+//! will be a panic.
+//!
 //! ### Acknowledgements
 //! This GC is heavily inspired by Nick Fitzgerald (fitzgen)'s
 //! GC for [Oxischeme](https://github.com/fitzgen/oxischeme),
@@ -93,6 +105,7 @@ use std::marker::Copy;
 use std::ops::{Deref, DerefMut, Drop};
 use std::cmp::{PartialEq, Eq};
 use std::default::Default;
+use std::cell::RefCell;
 
 const DEFAULT_SEGMENT_SIZE : usize = 32;
 const DEFAULT_ARENA_SIZE: usize = 2;
@@ -102,13 +115,13 @@ pub type Object = (); // TODO
 
 impl ToHeapObject for StringPtr {
     fn to_heap_object(&self) -> Option<HeapObject> {
-        None
+        Some(HeapObject::String(*self))
     }
 }
 
 impl ToHeapObject for ObjectPtr {
     fn to_heap_object(&self) -> Option<HeapObject> {
-        None
+        Some(HeapObject::Object(*self))
     }
 }
 
@@ -249,6 +262,18 @@ impl Heap {
         self.allocs_since_last_gc = 0;
     }
 
+    /// Returns the number of strings currently allocated
+    /// on the heap.
+    pub fn number_of_string_allocations(&self) -> usize {
+        self.string_arena.number_of_allocations()
+    }
+
+    /// Returns the number of objects currently allocated
+    /// on the heap.
+    pub fn number_of_object_allocations(&self) -> usize {
+        self.object_arena.number_of_allocations()
+    }
+
     /// Tries to determine whether or not a GC is a good
     /// idea based on advanced heuristics.
     fn should_gc(&self) -> bool {
@@ -268,15 +293,19 @@ impl Heap {
 
     /// Marks a heap object as rooted.
     fn root(&mut self, value: HeapObject) {
+        debug!(target: "gc", "rooting a pointer");
         for &mut (ref rooted_element, ref mut count) in &mut self.rooted_set {
             // try to find whether or not this thing
             // is already rooted.
             if *rooted_element == value {
                 *count += 1;
+                debug!(target: "gc", "target pointer was already rooted, \
+                                      incrementing root count to {}", count);
                 return;
             }
         }
 
+        debug!(target: "gc", "pointer was not rooted, adding to rooted set");
         // if it's not, stick it in the set.
         self.rooted_set.push((value, 1))
     }
@@ -285,6 +314,7 @@ impl Heap {
     /// the heap object is removed from the rooted set - otherwise
     /// the root count is decremented.
     fn unroot<T: ToHeapObject>(&mut self, ptr: &RootedPtr<T>) {
+        debug!(target: "gc", "unrooting a pointer");
         // apologies (and thanks) to fitzgen for this one, this is
         // the same basic strategy as his function that unroots a pointer.
         if let Some(heap_object) = ptr.to_heap_object() {
@@ -315,14 +345,15 @@ impl Heap {
     /// and all unmarked pointers are dead.
     fn mark_phase(&mut self) {
         debug!(target: "gc", "begin mark phase");
-        let mut stack = vec![];
+        debug!(target: "gc", "there are {} roots", self.rooted_set.len());
+        let mut worklist = vec![];
         for &(root, _) in &self.rooted_set {
-            stack.push(root);
+            worklist.push(root);
         }
 
-        while let Some(mut item) = stack.pop() {
+        while let Some(mut item) = worklist.pop() {
             item.mark();
-            stack.extend(item.trace());
+            worklist.extend(item.trace());
         }
         debug!(target: "gc", "mark phase complete");
     }
@@ -335,6 +366,7 @@ impl Heap {
         self.object_arena.sweep();
         debug!(target: "gc", "begin sweep phase for string arena");
         self.string_arena.sweep();
+        debug!(target: "gc", "sweep phase complete");
     }
 }
 
@@ -389,15 +421,25 @@ impl<T: Default> Arena<T> {
             segment.sweep();
         }
 
+        // TODO(perf) - This cleans out all empty segments, possibly
+        // reducing the number of segments to zero if the heap is empty,
+        // incurring the penalty of allocating a new segment on the next
+        // allocation. We should probably try to leave at least one.
         self.segments.retain(|s| !s.is_empty());
+    }
+
+    fn number_of_allocations(&self) -> usize {
+        self.segments.iter()
+            .map(|s| s.number_of_allocations())
+            .fold(0, |acc, item| acc + item)
     }
 }
 
 /// A segment is a collection of potential allocations. Each segment
 /// is composed of a series of slots, a free list, and a bit set
 /// indicating which slots are marked in a garbage collection.
-pub struct Segment<T> {
-    slots: Vec<T>,
+struct Segment<T> {
+    slots: Vec<RefCell<T>>,
     free_list: Vec<usize>,
     marked_set: BitSet
 }
@@ -408,7 +450,7 @@ impl<T: Default> Segment<T> {
     fn new() -> Segment<T> {
         Segment {
             slots: (0..DEFAULT_SEGMENT_SIZE)
-                .map(|_| Default::default())
+                .map(|_| RefCell::new(Default::default()))
                 .collect(),
             free_list: (0..DEFAULT_SEGMENT_SIZE).collect(),
             marked_set: BitSet::from_bit_vec(BitVec::from_elem(DEFAULT_SEGMENT_SIZE, true))
@@ -432,7 +474,7 @@ impl<T: Default> Segment<T> {
     /// Allocates from this segment if there is space available, returning None
     /// if there is not.
     fn allocate(&mut self) -> Option<GcPtr<T>> {
-        if self.is_empty() {
+        if self.is_full() {
             return None;
         }
 
@@ -443,6 +485,14 @@ impl<T: Default> Segment<T> {
     /// Returns true if this segment is empty, false otherwise.
     fn is_empty(&self) -> bool {
         self.free_list.len() == DEFAULT_SEGMENT_SIZE
+    }
+
+    fn is_full(&self) -> bool {
+        self.free_list.len() == 0
+    }
+
+    fn number_of_allocations(&self) -> usize {
+        DEFAULT_SEGMENT_SIZE - self.free_list.len()
     }
 }
 
@@ -483,8 +533,8 @@ impl<T> GcPtr<T> {
 }
 
 impl<T> Deref for GcPtr<T> {
-    type Target = T;
-    fn deref(&self) -> &T {
+    type Target = RefCell<T>;
+    fn deref(&self) -> &RefCell<T> {
         assert!(!self.segment.is_null(), "segment can not be null");
         let segment = unsafe { &mut *self.segment };
         &segment.slots[self.index]
@@ -492,7 +542,7 @@ impl<T> Deref for GcPtr<T> {
 }
 
 impl<T> DerefMut for GcPtr<T> {
-    fn deref_mut(&mut self) -> &mut T {
+    fn deref_mut(&mut self) -> &mut RefCell<T> {
         assert!(!self.segment.is_null(), "segment can not be null");
         let segment = unsafe { &mut *self.segment };
         &mut segment.slots[self.index]
@@ -522,13 +572,23 @@ pub struct RootedPtr<T: ToHeapObject> {
 impl<T: ToHeapObject> RootedPtr<T> {
     /// Creates a new RootedPtr and registers it as marked
     /// with the heap.
-    fn new(heap: &mut Heap, ptr: T) -> RootedPtr<T> {
+    pub fn new(heap: &mut Heap, ptr: T) -> RootedPtr<T> {
         let mut ptr = RootedPtr {
             heap: heap as *mut _,
             ptr: ptr
         };
         ptr.root();
         ptr
+    }
+
+    /// Swaps the pointer that this rooted pointer is rooting
+    /// by unrooting the existing element, assigning the
+    /// new element to the rooted pointer, and rooting the
+    /// new value.
+    pub fn swap(&mut self, other: T) {
+        self.unroot();
+        self.ptr = other;
+        self.root();
     }
 
     /// Marks this pointer as rooted.
@@ -577,3 +637,75 @@ impl<T: ToHeapObject> Drop for RootedPtr<T> {
 
 pub type RootedStringPtr = RootedPtr<StringPtr>;
 pub type RootedObjectPtr = RootedPtr<ObjectPtr>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    extern crate env_logger;
+
+    #[test]
+    fn test_smoke_test() {
+        let _ = env_logger::init();
+        let mut heap = Heap::new();
+        let alloc = heap.allocate_string();
+        let value = alloc.borrow();
+        assert_eq!(*value, String::new());
+    }
+
+    #[test]
+    fn test_heap_is_writable() {
+        let _ = env_logger::init();
+        let mut heap = Heap::new();
+        let alloc = heap.allocate_string();
+        *alloc.borrow_mut() = "hello, world!".to_string();
+        assert_eq!(&**alloc.borrow(), "hello, world!".to_string());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_soundness_hole_panic() {
+        let _ = env_logger::init();
+        let mut heap = Heap::new();
+        let alloc = heap.allocate_string();
+        let copied_ptr = *alloc;
+        let other_copied_ptr = *alloc;
+        // copied_ptr and other_copied_ptr can be used to alias the
+        // same cell of garbage-collected memory. However, it's
+        // a RefCell, so trying to break the pointer aliasing rules
+        // should panic.
+        let mut writable = copied_ptr.borrow_mut();
+        *writable = "hello world!".to_string();
+        let read = other_copied_ptr.borrow();
+        // the above call should panic instead of allowing the
+        // aliasing violation
+    }
+
+    #[test]
+    fn test_pointer_rooting() {
+        let _ = env_logger::init();
+        let mut heap = Heap::new();
+        let alloc = heap.allocate_string();
+        // alloc is currently rooted
+        assert!(1 == heap.number_of_string_allocations(), "failed to allocate string on heap");
+        heap.collect();
+        // alloc should not be collected since it is rooted
+        assert!(1 == heap.number_of_string_allocations(), "collected a rooted pointer");
+    }
+
+    #[test]
+    fn test_pointer_collection() {
+        let _ = env_logger::init();
+        let mut heap = Heap::new();
+        {
+            let alloc = heap.allocate_string();
+            assert!(1 == heap.number_of_string_allocations(), "failed to allocate string on heap");
+            heap.collect();
+            assert!(1 == heap.number_of_string_allocations(), "collected a rooted pointer");
+        }
+
+        // alloc is out of scope and is now unrooted.
+        // it should be reclaimed by the next collection
+        heap.collect();
+        assert!(0 == heap.number_of_string_allocations(), "failed to collect an unrooted pointer");
+    }
+}

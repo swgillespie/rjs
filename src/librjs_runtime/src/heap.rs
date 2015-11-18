@@ -25,8 +25,7 @@
 //! ### Arenas
 //! The managed heap is partitioned into multiple Arenas, each of
 //! which is composed of multiple segments. Today, the heap is
-//! partitioned by ECMAScript types that must be allocated
-//! on the heap: Strings and Objects.
+//! partitioned by ECMAScript type - one for each type.
 //!
 //! Each arena maintains a list of segments. Whenever an arena
 //! is asked to allocate (through the `allocate` method), it will
@@ -43,7 +42,7 @@
 //! A segment is a collection of locations that the allocator is
 //! free to use for ECMAScript objects. Each segment has a fixed
 //! size, which means that it is not always possible to allocate
-//! on a segment. When a  contains no objects, it is
+//! on a segment. When a segment contains no objects, it is
 //! deallocated by the arena that owns it.
 //!
 //! ### GC Smart Pointers
@@ -107,11 +106,10 @@ use std::cmp::{PartialEq, Eq};
 use std::default::Default;
 use std::cell::RefCell;
 
+use values::Object;
+
 const DEFAULT_SEGMENT_SIZE : usize = 32;
 const DEFAULT_ARENA_SIZE: usize = 2;
-
-pub type ESString = String;
-pub type Object = (); // TODO
 
 impl ToHeapObject for StringPtr {
     fn to_heap_object(&self) -> Option<HeapObject> {
@@ -125,10 +123,24 @@ impl ToHeapObject for ObjectPtr {
     }
 }
 
+impl ToHeapObject for NumberPtr {
+    fn to_heap_object(&self) -> Option<HeapObject> {
+        Some(HeapObject::Number(*self))
+    }
+}
+
+impl ToHeapObject for BooleanPtr {
+    fn to_heap_object(&self) -> Option<HeapObject> {
+        Some(HeapObject::Boolean(*self))
+    }
+}
+
 /// An object that can be allocated on the heap. The current heap
 /// allows for Strings and Objects to be allocated on the heap.
 #[derive(Copy, Clone, PartialEq)]
 pub enum HeapObject {
+    Number(NumberPtr),
+    Boolean(BooleanPtr),
     String(StringPtr),
     Object(ObjectPtr)
 }
@@ -138,7 +150,19 @@ impl HeapObject {
     fn mark(&mut self) {
         match *self {
             HeapObject::String(ref mut ptr) => ptr.mark(),
-            HeapObject::Object(ref mut ptr) => ptr.mark()
+            HeapObject::Object(ref mut ptr) => ptr.mark(),
+            HeapObject::Boolean(ref mut ptr) => ptr.mark(),
+            HeapObject::Number(ref mut ptr) => ptr.mark()
+        }
+    }
+
+    /// Returns whether or not this heap object can contain pointers.
+    /// Used to avoid calling the `Trace` impl of HeapObject when
+    /// the returned iterator will be empty.
+    fn contains_pointers(&self) -> bool {
+        match *self {
+            HeapObject::Object(_) => true,
+            _ => false
         }
     }
 }
@@ -148,7 +172,9 @@ impl Trace for HeapObject {
     fn trace(&self) -> IntoIter<HeapObject> {
         match *self {
             HeapObject::String(_) => vec![].into_iter(),
-            HeapObject::Object(_) => /* TODO */ vec![].into_iter()
+            HeapObject::Number(_) => vec![].into_iter(),
+            HeapObject::Boolean(_) => vec![].into_iter(),
+            HeapObject::Object(obj) => obj.borrow().trace()
         }
     }
 }
@@ -172,7 +198,9 @@ pub trait Trace {
 /// while keeping track of which pointers are rooted by both arenas.
 pub struct Heap {
     object_arena: Arena<Object>,
-    string_arena: Arena<ESString>,
+    string_arena: Arena<String>,
+    number_arena: Arena<f64>,
+    boolean_arena: Arena<bool>,
     rooted_set: Vec<(HeapObject, usize)>,
     allocs_since_last_gc: usize
 }
@@ -183,6 +211,8 @@ impl Heap {
         Heap {
             object_arena: Arena::new(),
             string_arena: Arena::new(),
+            number_arena: Arena::new(),
+            boolean_arena: Arena::new(),
             rooted_set: vec![],
             allocs_since_last_gc: 0
         }
@@ -251,6 +281,66 @@ impl Heap {
         RootedPtr::new(self, good_alloc)
     }
 
+    /// Allocates a number on the garbage-collected heap and returns
+    /// a rooted pointer to it.
+    /// ## GC Considerations
+    /// This function may trigger a garbage collection.
+    pub fn allocate_number(&mut self) -> RootedNumberPtr {
+        let alloc = self.number_arena.allocate();
+        if let Some(ptr) = alloc {
+            self.allocs_since_last_gc += 1;
+            return RootedPtr::new(self, ptr);
+        }
+
+        if self.should_gc() {
+            self.collect();
+        } else {
+            self.number_arena.add_segment();
+        }
+
+        let good_alloc = if let Some(alloc) = self.number_arena.allocate() {
+            alloc
+        } else {
+            warn!(target: "gc", "having to expand the heap anyway after performing a gc");
+            self.number_arena.add_segment();
+            self.number_arena.allocate()
+                .expect("allocation after heap expansion should always succeed")
+        };
+
+        self.allocs_since_last_gc += 1;
+        RootedPtr::new(self, good_alloc)
+    }
+
+    /// Allocates a boolean on the garbage-collected heap and returns
+    /// a rooted pointer to it.
+    /// ## GC Considerations
+    /// This function may trigger a garbage collection.
+    pub fn allocate_boolean(&mut self) -> RootedBooleanPtr {
+        let alloc = self.boolean_arena.allocate();
+        if let Some(ptr) = alloc {
+            self.allocs_since_last_gc += 1;
+            return RootedPtr::new(self, ptr);
+        }
+
+        if self.should_gc() {
+            self.collect();
+        } else {
+            self.boolean_arena.add_segment();
+        }
+
+        let good_alloc = if let Some(alloc) = self.boolean_arena.allocate() {
+            alloc
+        } else {
+            warn!(target: "gc", "having to expand the heap anyway after performing a gc");
+            self.boolean_arena.add_segment();
+            self.boolean_arena.allocate()
+                .expect("allocation after heap expansion should always succeed")
+        };
+
+        self.allocs_since_last_gc += 1;
+        RootedPtr::new(self, good_alloc)
+    }
+
     /// Initiates a garbage collection.
     /// ## GC Considerations
     /// This function does trigger a garbage collection.
@@ -272,6 +362,18 @@ impl Heap {
     /// on the heap.
     pub fn number_of_object_allocations(&self) -> usize {
         self.object_arena.number_of_allocations()
+    }
+
+    /// Returns the number of numbers currently allocated
+    /// on the heap.
+    pub fn number_of_number_allocations(&self) -> usize {
+        self.number_arena.number_of_allocations()
+    }
+
+    /// Returns the number of numbers currently allocated
+    /// on the heap.
+    pub fn number_of_boolean_allocations(&self) -> usize {
+        self.boolean_arena.number_of_allocations()
     }
 
     /// Tries to determine whether or not a GC is a good
@@ -353,7 +455,9 @@ impl Heap {
 
         while let Some(mut item) = worklist.pop() {
             item.mark();
-            worklist.extend(item.trace());
+            if item.contains_pointers() {
+                worklist.extend(item.trace());
+            }
         }
         debug!(target: "gc", "mark phase complete");
     }
@@ -557,8 +661,10 @@ impl<T: PartialEq> PartialEq for GcPtr<T> {
 
 impl<T: Eq> Eq for GcPtr<T> {}
 
-pub type StringPtr = GcPtr<ESString>;
+pub type StringPtr = GcPtr<String>;
 pub type ObjectPtr = GcPtr<Object>;
+pub type NumberPtr = GcPtr<f64>;
+pub type BooleanPtr = GcPtr<bool>;
 
 /// A smart pointer type that represents a pointer
 /// to garbage collected memory that is marked as rooted.
@@ -637,6 +743,8 @@ impl<T: ToHeapObject> Drop for RootedPtr<T> {
 
 pub type RootedStringPtr = RootedPtr<StringPtr>;
 pub type RootedObjectPtr = RootedPtr<ObjectPtr>;
+pub type RootedNumberPtr = RootedPtr<NumberPtr>;
+pub type RootedBooleanPtr = RootedPtr<BooleanPtr>;
 
 #[cfg(test)]
 mod tests {

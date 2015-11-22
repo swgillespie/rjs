@@ -5,11 +5,10 @@
 //!    function declarations,
 //! * Others which have yet to be written.
 
-use super::super::heap::{Heap, RootedPtr, Trace, HeapObject, ObjectPtr};
+use super::super::heap::{Trace, HeapObject};
 use super::super::exec::ExecutionEngine;
-use super::{RootedValue, Property, EvalValue, Value};
+use super::{RootedValue, Property, EvalValue};
 
-use std::collections::HashMap;
 use std::vec::IntoIter;
 use std::default::Default;
 

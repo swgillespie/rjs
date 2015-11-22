@@ -10,3 +10,4 @@ extern crate log;
 pub mod heap;
 pub mod values;
 pub mod exec;
+pub mod compiler;

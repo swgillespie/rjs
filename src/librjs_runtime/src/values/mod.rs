@@ -53,7 +53,7 @@
 
 mod object;
 
-use super::heap::{Heap, RootedPtr, ToHeapObject, HeapObject, Trace};
+use super::heap::{RootedPtr, ToHeapObject, HeapObject, Trace};
 use std::vec::IntoIter;
 
 pub use self::object::Object;

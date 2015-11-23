@@ -135,15 +135,15 @@ pub enum Expression {
     Unary(UnaryOperator, bool, Box<Expression>),
     Update(UpdateOperator, bool, Box<Expression>),
     Binary(BinaryOperator, Box<Expression>, Box<Expression>),
-    ReferenceAssignment(AssignmentOperator, InternedString, Box<Expression>),
-    LValueAssignment(AssignmentOperator, Box<Expression>, Box<Expression>),
+    ReferenceAssignment(InternedString, Box<Expression>),
+    LValueAssignment(Box<Expression>, Box<Expression>),
     Logical(LogicalOperator, Box<Expression>, Box<Expression>),
     IdentifierMember(Box<Expression>, InternedString),
     CalculatedMember(Box<Expression>, Box<Expression>),
     Conditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
     New(Box<Expression>, Vec<Expression>),
-    Sequence(Vec<Expression>),
+    Sequence(Vec<Statement>, Box<Expression>),
     Identifier(InternedString),
     Literal(Literal)
 }
@@ -214,22 +214,6 @@ pub enum BinaryOperator {
     BitwiseAnd,
     In,
     Instanceof
-}
-
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum AssignmentOperator {
-    Equal,
-    PlusEqual,
-    MinusEqual,
-    TimesEqual,
-    DivEqual,
-    ModEqual,
-    LeftShiftEqual,
-    RightShiftEqual,
-    TripleRightShiftEqual,
-    BitwiseOrEqual,
-    BitwiseXorEqual,
-    BitwiseAndEqual
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]

@@ -1341,6 +1341,11 @@ impl<I: Iterator<Item=char>> Parser<I> {
             }
         }
 
+        if next_token_is!(self, false, TokenKind::NullLiteral) {
+            let span = try!(self.eat_token(TokenKind::NullLiteral, false));
+            return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Null)));
+        }
+
         let Token { span, kind, .. } = self.next_token(false).unwrap();
         if let TokenKind::OctalIntegerLiteral(s) = kind {
             let value = self.octal_mathematical_value(&s);

@@ -5,3 +5,6 @@ authors = ["swgillespie <sean.william.g@gmail.com>"]
 
 [dependencies.librjs]
 path = "../librjs"
+
+[dependencies]
+time = "0.1.34"

@@ -2,12 +2,6 @@
 
 use super::string_interer::InternedString;
 
-pub struct CompiledFunction {
-    pub arity: usize,
-    pub name: Option<InternedString>,
-    pub code: Box<[Opcode]>
-}
-
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Opcode {
     /// Does nothing.
@@ -100,8 +94,11 @@ pub enum Opcode {
     /// onto the stack if the property deletion was successful
     /// or `false` otherwise.
     DeleteProperty(InternedString),
+    /// Pops two values from the stack and deletes a property with the given name
+    /// popped of the stack from the object popped off the stack.
+    DeleteElement,
     /// Deletes a name from the current scope.
-    DeleteElement(InternedString),
+    DeleteName(InternedString),
     /// Pops a value from the stack, coerces it into an object, and calls
     /// [[Get]] upon the property with the given name.
     GetProperty(InternedString),
@@ -158,5 +155,22 @@ pub enum Opcode {
     /// with that value.
     Ret,
     /// Pops a value off the stack and throws it as an exception.
-    Throw
+    Throw,
+    /// Pops a function object, a value for `this`, and some number of arguments off the stack and
+    /// invokes that function object with the given arguments, pushing the return value
+    /// of the function onto the stack.
+    Call(usize),
+    /* environment manipulation */
+    /// Pops a value off of the stack and adds it to the current environment
+    /// record with the current name.
+    Def(InternedString),
+    /// Pushes a reference to the current value of `this` onto the stack.
+    This,
+    /* branching fixups for the emit stage. These should not persist
+       at runtime */
+    UnfixedBrTrue(usize),
+    UnfixedBrFalse(usize),
+    UnfixedJump(usize),
+    /* opcodes emitted by the compiler indicating that an operation is not yet implemented */
+    NotImplemented(&'static str)
 }

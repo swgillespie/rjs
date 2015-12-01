@@ -1,4 +1,6 @@
 //! The execution engine is responsible for actually executing ECMAScript programs.
+#![allow(unused_variables, dead_code)]
+
 use heap::Heap;
 use values::{RootedValue, EvalValue};
 

@@ -35,7 +35,6 @@ impl Program {
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Function {
     uses_with: bool,
-    uses_eval: bool,
     uses_arguments_identifier: bool,
     name: Option<InternedString>,
     parameters: Vec<InternedString>,
@@ -54,14 +53,6 @@ impl Function {
 
     pub fn set_uses_with(&mut self, value: bool) {
         self.uses_with = value;
-    }
-
-    pub fn uses_eval(&self) -> bool {
-        self.uses_eval
-    }
-
-    pub fn set_uses_eval(&mut self, value: bool) {
-        self.uses_eval = value;
     }
 
     pub fn uses_arguments_identifier(&self) -> bool {

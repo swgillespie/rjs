@@ -1,12 +1,16 @@
 extern crate librjs;
 extern crate time;
+extern crate readline;
 
-use std::io::{self, Read, Write, BufRead, StdoutLock};
+mod dis;
+
+use std::io::{self, Read, Write, StdoutLock};
 use std::fs::File;
 use std::env;
 use librjs::syntax::{Lexer, Parser};
 use librjs::runtime::compiler::{self, string_interer};
 use time::Duration;
+use std::ffi::CString;
 
 fn main() {
     let args : Vec<_> = env::args().collect();
@@ -16,16 +20,20 @@ fn main() {
     }
 
     let mut interner = string_interer::StringInterner::new();
-    let stdin_unlocked = io::stdin();
     let stdout_unlocked = io::stdout();
-    let mut stdin = stdin_unlocked.lock();
     let mut stdout = stdout_unlocked.lock();
-    loop {
-        let mut buffer = String::new();
-        write!(&mut stdout, ">> ").unwrap();
-        stdout.flush().unwrap();
-        stdin.read_line(&mut buffer).unwrap();
-        parse_and_print(&buffer, &mut stdout, &mut interner);
+    let prompt = CString::new(">> ").unwrap();
+    while let Ok(data) = readline::readline(&prompt) {
+        let as_str = match data.to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                writeln!(&mut stdout, "not valid UTF8").unwrap();
+                continue;
+            }
+        };
+
+        readline::add_history(&data);
+        parse_and_print(as_str, &mut stdout, &mut interner);
     }
 }
 
@@ -62,14 +70,32 @@ fn parse_file(filename: &str) {
         };
     });
 
-    let real_ast = ast.unwrap();
+    let real_ast = if let Some(actual_ast) = ast {
+        actual_ast
+    } else {
+        return;
+    };
 
     let mut interner = string_interer::StringInterner::new();
+    let mut hir = None;
     let hir_time = Duration::span(|| {
-        compiler::lower_program_to_hir(&mut interner, &real_ast);
+        hir = Some(compiler::lower_program_to_hir(&mut interner, &real_ast));
     });
 
+    let real_hir = hir.unwrap();
+
+    //println!("{:#?}", real_hir);
+
+    let mut compiled_program = None;
+    let bytecode_time = Duration::span(|| {
+        compiled_program = Some(compiler::lower_hir_to_bytecode(interner, &real_hir));
+    });
+
+    dis::disassemble_program(compiled_program.as_ref().unwrap());
+
+
     println!("hir construction complete");
-    println!("  parse time:       {} ms", parse_time.num_milliseconds());
-    println!("  hir construction: {} ms", hir_time.num_milliseconds());
+    println!("  parse time:       {} ms ({} μs)", parse_time.num_milliseconds(), parse_time.num_microseconds().unwrap_or_default());
+    println!("  hir construction: {} ms ({} μs)", hir_time.num_milliseconds(), hir_time.num_microseconds().unwrap_or_default());
+    println!("  bytecode emit:    {} ms ({} μs)", bytecode_time.num_milliseconds(), bytecode_time.num_microseconds().unwrap_or_default());
 }

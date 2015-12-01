@@ -1,19 +1,66 @@
+//! This module provides a type responsible for "lowering" an ECMAScript syntax tree
+//! into a *high-level intermediate representation*, or **HIR**, upon which all other
+//! compiler passes will operate. The purpose of a high-level intermediate language is to
+//! provide a high-level overview of a program's semantics in a way that is closely tied to
+//! the language definition, but *desugared*.
+//!
+//! The objective of desugaring is to reduce the surface area upon which compiler passes have
+//! to operate. Desugaring the AST into a HIR makes it much easier to write a bytecode lowerer,
+//! since many syntactic constructs get eliminated when translated to HIR.
+//!
+//! ## Syntax Sugar in ECMAScript
+//! ECMAScript is not a particularly saccharine language - most of its syntactic constructs
+//! can't be reduced to anything more fundamental. However, there are several notable exceptions
+//! that get lowered by this pass:
+//!
+//! 1. The ternary operator `?`, which desugars into a local + an `if` statement,
+//! 2. C-style `for`-loops, which desugar into a `while` loop,
+//! 3. Compound assignment operators (e.g. `+=`, `-=`), which desugar into a binary operation
+//!    and an assignment.
+//!
+//! It is very likely that this pass will be able to desugar more and more things as time goes
+//! on and this interpreter matures.
+
 use librjs_syntax::ast;
 use super::hir;
 use super::string_interer::StringInterner;
 use std::string::ToString;
+use std::default::Default;
 
+#[derive(Copy, Clone, Debug, Default)]
+struct BuilderState {
+    uses_with: bool,
+    uses_arguments_ident: bool
+}
+
+impl BuilderState {
+    pub fn new() -> BuilderState {
+        Default::default()
+    }
+
+    pub fn reset(&mut self) {
+        self.uses_arguments_ident = false;
+        self.uses_with = false;
+    }
+}
+
+/// Struct responsible for lowering an AST into HIR, a high-level
+/// intermediate language that is transformed into bytecode.
 pub struct HirBuilder<'a> {
-    interner: &'a mut StringInterner
+    interner: &'a mut StringInterner,
+    state: BuilderState
 }
 
 impl<'a> HirBuilder<'a> {
+    /// Creates a new HirBuilder from a given string interner.
     pub fn new(interner: &'a mut StringInterner) -> HirBuilder {
         HirBuilder {
-            interner: interner
+            interner: interner,
+            state: BuilderState::new()
         }
     }
 
+    /// Lowers a program into HIR.
     pub fn lower_program(&mut self, program: &ast::Program) -> hir::Program {
         let mut hir_program = hir::Program::new();
         for prolog_entry in &program.directive_prologue {
@@ -29,6 +76,7 @@ impl<'a> HirBuilder<'a> {
         hir_program
     }
 
+    /// Lowers a statement into HIR.
     pub fn lower_statement(&mut self, stmt: &ast::SpannedStatement) -> hir::Statement {
         match stmt.data {
             ast::Statement::Expression(ref expr) => self.lower_expression_statement(expr),
@@ -79,6 +127,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_with_statement(&mut self,
                             obj: &ast::SpannedExpression,
                             body: &ast::SpannedStatement) -> hir::Statement {
+        self.state.uses_with = true;
         let lowered_obj = self.lower_expression(obj);
         let lowered_body = self.lower_statement(body);
         hir::Statement::With(lowered_obj, Box::new(lowered_body))
@@ -154,6 +203,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_catch_clause(&mut self, catch: &ast::CatchClause) -> hir::CatchClause {
         // TODO(ES6) - pattern destructuring
         let ast::Pattern::Identifier(ref ident) = catch.param.data;
+        self.check_name(&ident.data);
         let interned_param = self.interner.intern(&ident.data);
         let interned_body = self.lower_statement(&*catch.body);
         hir::CatchClause {
@@ -268,6 +318,9 @@ impl<'a> HirBuilder<'a> {
             }
         }
 
+        let old_state = self.state;
+        self.state.reset();
+
         for stmt in &func.body {
             function.add_statement(self.lower_statement(stmt));
         }
@@ -275,18 +328,17 @@ impl<'a> HirBuilder<'a> {
         for param in &func.parameters {
             // TODO(ES6) - destructuring patterns
             let ast::Pattern::Identifier(ref ident) = param.data;
-            if ident.data == "arguments" {
-                // we need to keep track of the arguments identifier,
-                // since it influences what we're going to do with
-                // the arguments object later
-                function.set_uses_arguments_identifier(true);
-            }
-
+            self.check_name(&ident.data);
             let interned_param = self.interner.intern(&ident.data);
             function.add_parameter(interned_param);
         }
 
+        function.set_uses_arguments_identifier(self.state.uses_arguments_ident);
+        function.set_uses_with(self.state.uses_with);
+        self.state = old_state;
+
         if let Some(ref name) = func.name {
+            self.check_name(&name.data);
             let interned = self.interner.intern(&name.data);
             function.set_name(interned);
         }
@@ -298,6 +350,7 @@ impl<'a> HirBuilder<'a> {
         let lowered_decls : Vec<_> = decls.iter()
             .map(|d| {
                 let ast::Pattern::Identifier(ref ident) = d.id.data;
+                self.check_name(&ident.data);
                 let interned_name = self.interner.intern(&ident.data);
                 let lowered_value = d.initial_value.as_ref().map(|s| self.lower_expression(s));
                 hir::VariableDeclarator {
@@ -624,6 +677,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     fn lower_identifier(&mut self, ident: &ast::Identifier) -> hir::Expression {
+        self.check_name(&ident.data);
         let interned = self.interner.intern(&ident.data);
         hir::Expression::Identifier(interned)
     }
@@ -655,6 +709,12 @@ impl<'a> HirBuilder<'a> {
             .collect();
         let final_expr = self.lower_expression(&expr[0]);
         hir::Expression::Sequence(lowered_statements, Box::new(final_expr))
+    }
+
+    fn check_name(&mut self, name: &str) {
+        if name == "arguments" {
+            self.state.uses_arguments_ident = true;
+        }
     }
 }
 

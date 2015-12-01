@@ -96,7 +96,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
             // implementation-defined meanings, but in the case of
             // the standard, the only required one is "use strict",
             // which puts the interpreter into strict mode.
-            if let Statement::Expression(_) = statement.data {
+            //
+            // SPEC_NOTE: while it's nice for the spec, this is not true at all in practice.
+            // The problem is that many side-effecting operations are expressions and can't
+            // be considered as part of the directive prolog. We only consider string literal
+            // expression statements for the prolog since that's generally how they are used.
+            if let Statement::Expression(Spanned { data: Expression::Literal(Literal::String(_)), .. }) = statement.data {
                 if self.in_directive_prologue {
                     prolog.push(statement);
                 } else {
@@ -833,7 +838,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             // implementation-defined meanings, but in the case of
             // the standard, the only required one is "use strict",
             // which puts the interpreter into strict mode.
-            if let Statement::Expression(_) = statement.data {
+            if let Statement::Expression(Spanned { data: Expression::Literal(Literal::String(_)), .. }) = statement.data {
                 if self.in_directive_prologue {
                     prolog.push(statement);
                 } else {

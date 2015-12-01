@@ -774,16 +774,16 @@ mod tests {
     fn test_soundness_hole_panic() {
         let _ = env_logger::init();
         let mut heap = Heap::new();
-        let alloc = heap.allocate_string();
-        let copied_ptr = *alloc;
-        let other_copied_ptr = *alloc;
+        let _alloc = heap.allocate_string();
+        let copied_ptr = *_alloc;
+        let other_copied_ptr = *_alloc;
         // copied_ptr and other_copied_ptr can be used to alias the
         // same cell of garbage-collected memory. However, it's
         // a RefCell, so trying to break the pointer aliasing rules
         // should panic.
         let mut writable = copied_ptr.borrow_mut();
         *writable = "hello world!".to_string();
-        let read = other_copied_ptr.borrow();
+        let _read = other_copied_ptr.borrow();
         // the above call should panic instead of allowing the
         // aliasing violation
     }
@@ -792,7 +792,7 @@ mod tests {
     fn test_pointer_rooting() {
         let _ = env_logger::init();
         let mut heap = Heap::new();
-        let alloc = heap.allocate_string();
+        let _alloc = heap.allocate_string();
         // alloc is currently rooted
         assert!(1 == heap.number_of_string_allocations(), "failed to allocate string on heap");
         heap.collect();
@@ -805,7 +805,7 @@ mod tests {
         let _ = env_logger::init();
         let mut heap = Heap::new();
         {
-            let alloc = heap.allocate_string();
+            let _alloc = heap.allocate_string();
             assert!(1 == heap.number_of_string_allocations(), "failed to allocate string on heap");
             heap.collect();
             assert!(1 == heap.number_of_string_allocations(), "collected a rooted pointer");

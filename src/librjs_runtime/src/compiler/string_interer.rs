@@ -31,7 +31,7 @@ impl StringInterner {
         last_idx
     }
 
-    pub fn get(&mut self, idx: InternedString) -> &str {
+    pub fn get(&self, idx: InternedString) -> &str {
         // assumption - InternedStrings can only come from the
         // string interner, so we can assume that it's a valid index
         // into the intern table.

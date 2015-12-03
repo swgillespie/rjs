@@ -10,6 +10,8 @@ pub enum Opcode {
     Dup,
     /// Pops a value from the stack.
     Pop,
+    /// Swaps the position of TOS and TOS-1 on the stack.
+    Rotate,
     /* unary operations */
     /// Pops a value from the stack and pushes `-value`
     /// onto the stack.
@@ -145,6 +147,8 @@ pub enum Opcode {
     LdNull,
     /// Pushes `undefined` onto the stack.
     LdUndefined,
+    /// Pushes a constant regular expression onto the stack.
+    LdRegex(InternedString, InternedString),
     /// Indexes into the anonymous function table and pushes a function object
     /// onto the stack. The function object is not valid in this state - it must
     /// be combined with `make_closure` to fill in the free variable vector

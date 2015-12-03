@@ -267,10 +267,9 @@ impl BytecodeBuilder {
             hir::Expression::Function(ref function) => self.lower_function_expression(emitter, function),
             hir::Expression::Unary(op, prefix, ref expr) => self.lower_unary_op(emitter, op, prefix, expr),
             hir::Expression::Binary(op, ref left, ref right) => self.lower_binary_op(emitter, op, left, right),
-            /*&hir::Expression::Update(op, prefix, ref expr) => self.lower_update_op(op, prefix, expr),
-            hir::Expression::Logical(op, ref left, ref right) => self.lower_logical_op(op, left, right),
             hir::Expression::Call(ref base, ref args) =>
-                self.lower_call_expression(base, args),
+                self.lower_call_expression(emitter, base, args),
+            /*hir::Expression::Logical(op, ref left, ref right) => self.lower_logical_op(op, left, right),
             hir::Expression::New(ref base, ref args) =>
                 self.lower_new_expression(base, args),*/
             hir::Expression::Sequence(ref seq, ref expr) => self.lower_sequence(emitter, seq, expr),
@@ -389,7 +388,8 @@ impl BytecodeBuilder {
             hir::Literal::Boolean(b) => emitter.emit_ldbool(b),
             hir::Literal::Null => emitter.emit_ldnull(),
             hir::Literal::Numeric(n) => emitter.emit_ldnum(n),
-            _ => emitter.emit_not_implemented("string or regex literals")
+            hir::Literal::String(s) => emitter.emit_ldstring(s),
+            hir::Literal::RegExp(reg, flags) => emitter.emit_ldregex(reg, flags)
         }
     }
 
@@ -436,6 +436,41 @@ impl BytecodeBuilder {
             hir::BinaryOperator::Times => emitter.emit_mul(),
             hir::BinaryOperator::TripleRightShift => emitter.emit_unsigned_rightshift()
         }
+    }
+
+    fn lower_call_expression<E: BytecodeEmitter>(&mut self, emitter: &mut E, base: &hir::Expression, args: &[hir::Expression]) {
+        // call instructions require that the value of `this` be pushed onto the stack in
+        // addition to the object being called and the arguments to the function.
+        if let hir::Expression::IdentifierMember(ref ident_base, prop) = *base {
+            // calls of the form x.ident() require us to pass the value of `x` as `this`.
+            self.lower_expression(emitter, ident_base); // this
+            emitter.emit_dup();                         // this this
+            emitter.emit_get_property(prop);            // prop this
+            emitter.emit_rotate();                      // this prop
+        } else if let hir::Expression::CalculatedMember(ref ident_base, ref prop_base) = *base {
+            // calls of the form x[expr] require us to also pass the value of `x` as `this`.
+            // The difference here is that we have to evaluate expr as well and emit a
+            // `getelem` instead of invoking the property directly.
+            self.lower_expression(emitter, ident_base); // this
+            emitter.emit_dup();                         // this this
+            self.lower_expression(emitter, prop_base);  // expr this this
+            emitter.emit_rotate();                      // this expr this
+            emitter.emit_get_element();                 // prop this
+            emitter.emit_rotate();                      // this prop
+        } else {
+            // otherwise, the this value is the implicit this from this environment record
+            // something like stuff(42)...
+            self.lower_expression(emitter, base); // stuff
+            emitter.emit_this();                  // this stuff
+        }
+
+        for arg in args {
+            self.lower_expression(emitter, arg);    // <args> this prop
+        }
+
+        // call - pops args.len() arguments off the stack, pops `this`, and pops
+        // an object and invokes the [[Call]] internal method on it.
+        emitter.emit_call(args.len());
     }
 
     fn lower_function<'a>(&mut self, func: &hir::Function) -> FunctionEmitter {

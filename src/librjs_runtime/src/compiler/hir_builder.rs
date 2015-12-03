@@ -517,15 +517,77 @@ impl<'a> HirBuilder<'a> {
                        op: ast::UpdateOperator,
                        prefix: bool,
                        expr: &ast::SpannedExpression) -> hir::Expression {
-        let lowered_op = self.lower_update_operator(op);
         let lowered_expr = self.lower_expression(expr);
-        hir::Expression::Update(lowered_op, prefix, Box::new(lowered_expr))
-    }
+        let actual_op = match op {
+            ast::UpdateOperator::Increment => hir::BinaryOperator::Plus,
+            ast::UpdateOperator::Decrement => hir::BinaryOperator::Minus
+        };
 
-    fn lower_update_operator(&mut self, op: ast::UpdateOperator) -> hir::UpdateOperator {
-        match op {
-            ast::UpdateOperator::Increment => hir::UpdateOperator::Increment,
-            ast::UpdateOperator::Decrement => hir::UpdateOperator::Decrement
+        if !prefix {
+            // x++ or x-- translate to
+            //   var old = +x;
+            //   x = old + 1;
+            //   old
+            let old_sym = self.interner.gensym();
+            let assignment = match &lowered_expr {
+                &hir::Expression::Identifier(value) => hir::Expression::ReferenceAssignment(
+                    value,
+                    Box::new(hir::Expression::Binary(
+                        actual_op,
+                        Box::new(hir::Expression::Identifier(old_sym)),
+                        Box::new(hir::Expression::Literal(hir::Literal::Numeric(1f64)))))),
+                expr => hir::Expression::LValueAssignment(
+                    Box::new(expr.clone()),
+                    Box::new(hir::Expression::Binary(
+                        actual_op,
+                        Box::new(hir::Expression::Identifier(old_sym)),
+                        Box::new(hir::Expression::Literal(hir::Literal::Numeric(1f64))))))
+            };
+
+            hir::Expression::Sequence(
+                vec![
+                    hir::Statement::Expression(
+                        hir::Expression::ReferenceAssignment(
+                            self.interner.gensym(),
+                            Box::new(hir::Expression::Unary(hir::UnaryOperator::Plus, true, Box::new(lowered_expr)))
+                        )
+                    ),
+                    hir::Statement::Expression(assignment),
+                ],
+                Box::new(hir::Expression::Identifier(old_sym)))
+        } else {
+            // ++x or --x translate to
+            //   var new = +x +/- 1;
+            //   x = new
+            //   new
+            let new_sym = self.interner.gensym();
+            let first_stmt = hir::Statement::Expression(
+                hir::Expression::ReferenceAssignment(
+                    new_sym,
+                    Box::new(hir::Expression::Binary(
+                        actual_op,
+                        Box::new(hir::Expression::Unary(hir::UnaryOperator::Plus, true, Box::new(lowered_expr.clone()))),
+                        Box::new(hir::Expression::Literal(hir::Literal::Numeric(1f64)))
+                    ))
+                )
+            );
+
+            let assignment = match &lowered_expr {
+                &hir::Expression::Identifier(value) => hir::Expression::ReferenceAssignment(
+                    value,
+                    Box::new(hir::Expression::Identifier(new_sym))),
+                expr => hir::Expression::LValueAssignment(
+                    Box::new(expr.clone()),
+                    Box::new(hir::Expression::Identifier(new_sym)))
+            };
+
+            hir::Expression::Sequence(
+                vec![
+                    first_stmt,
+                    hir::Statement::Expression(assignment)
+                ],
+                Box::new(hir::Expression::Identifier(new_sym))
+            )
         }
     }
 
@@ -687,8 +749,8 @@ impl<'a> HirBuilder<'a> {
             ast::Literal::Boolean(value) => hir::Literal::Boolean(value),
             ast::Literal::Null => hir::Literal::Null,
             ast::Literal::Numeric(value) => hir::Literal::Numeric(value),
-            ast::Literal::RegExp(ref regex, ref flags) => hir::Literal::RegExp(regex.clone(), flags.clone()),
-            ast::Literal::String(ref value) => hir::Literal::String(value.clone())
+            ast::Literal::RegExp(ref regex, ref flags) => hir::Literal::RegExp(self.interner.intern(regex), self.interner.intern(flags)),
+            ast::Literal::String(ref value) => hir::Literal::String(self.interner.intern(value))
         };
 
         hir::Expression::Literal(hir_lit)

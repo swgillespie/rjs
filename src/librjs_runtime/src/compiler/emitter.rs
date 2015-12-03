@@ -83,6 +83,10 @@ pub trait BytecodeEmitter {
         self.emit_opcode(Opcode::Pop);
     }
 
+    fn emit_rotate(&mut self) {
+        self.emit_opcode(Opcode::Rotate);
+    }
+
     fn emit_neg(&mut self) {
         self.emit_opcode(Opcode::Neg);
     }
@@ -257,6 +261,10 @@ pub trait BytecodeEmitter {
 
     fn emit_ldundefined(&mut self) {
         self.emit_opcode(Opcode::LdUndefined);
+    }
+
+    fn emit_ldregex(&mut self, reg: InternedString, flags: InternedString) {
+        self.emit_opcode(Opcode::LdRegex(reg, flags));
     }
 
     fn emit_ldlambda(&mut self, idx: usize) {

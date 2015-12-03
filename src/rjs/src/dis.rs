@@ -30,6 +30,7 @@ pub fn print_op(op: bytecode::Opcode, interner: &string_interer::StringInterner)
         Opcode::Nop                => println!("    nop"),
         Opcode::Dup                => println!("    dup"),
         Opcode::Pop                => println!("    pop"),
+        Opcode::Rotate             => println!("    rotate"),
         Opcode::Neg                => println!("    neg"),
         Opcode::Pos                => println!("    pos"),
         Opcode::Not                => println!("    not"),
@@ -71,15 +72,17 @@ pub fn print_op(op: bytecode::Opcode, interner: &string_interer::StringInterner)
         Opcode::Debugger           => println!("    debugger"),
         Opcode::LdNum(f)           => println!("    ldnum {}", f),
         Opcode::LdBool(b)          => println!("    ldbool {}", b),
-        Opcode::LdString(s)        => println!("    ldstr {}", interner.get(s)),
+        Opcode::LdString(s)        => println!("    ldstr \"{}\"", interner.get(s)),
         Opcode::LdNull             => println!("    ldnull"),
         Opcode::LdUndefined        => println!("    ldundefined"),
+        Opcode::LdRegex(a, s)      => println!("    ldlregex /{}/{}", interner.get(a), interner.get(s)),
         Opcode::LdLambda(i)        => println!("    ldlambda <anonymous function #{}>", i),
         Opcode::Ret                => println!("    ret"),
         Opcode::Throw              => println!("    throw"),
         Opcode::Def(s)             => println!("    def {}", interner.get(s)),
         Opcode::This               => println!("    this"),
+        Opcode::Call(i)            => println!("    call {}", i),
         Opcode::NotImplemented(s)  => println!("    not_implemented {}", s),
-        _ => println!("    <invalid opcode>")
+        e => panic!("invalid opcode: {:?}", e)
     }
 }

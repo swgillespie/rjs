@@ -1436,9 +1436,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // that whatever we've parsed is legal as the left hand side
         // of an assignment operator.
         //
-        // In general, all we have to do here is verify that whatever we
-        // parsed is not an "operator expression", i.e. some sort of binary,
-        // unary, or ternary expression.
+        // In ECMAScript 5, the only things that can be on the left hand side of an expression
+        // are call expressions, identifiers, and member access expressions. This implementation
+        // does not allow call expressions yet, so it's just identifiers and member accesses.
         //
         // It's also impossible for a Sequence expression to appear
         // on the LHS of an assignment statement, since
@@ -1446,21 +1446,24 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // The expression "x, y = 42" is parsed as the expression sequence
         // Seq(x, y = 42), since the comma operator has such low precedence.
         match lhs.data {
-            Expression::Unary(_, _, _) |
-            Expression::Binary(_, _, _) |
-            Expression::Conditional(_, _, _) |
-            Expression::Assignment(_, _, _) |
-            Expression::Logical(_, _, _) |
-            Expression::Update(_, _, _) => span_err!(lhs.span, "illegal left-hand side in assignment"),
-            _ => ()
+            Expression::Member(_, _, _) => (),
+            Expression::Identifier(_) => (),
+            _ => span_err!(lhs.span, "illegal left-hand side in assignment"),
         }
 
         // es5 only allows identifiers as patterns.
         let pat_or_exp = match lhs.data {
-            Expression::Identifier(ref data) => PatternOrExpression::Pattern(Spanned {
-                span: lhs.span,
-                data: Pattern::Identifier(data.clone())
-            }),
+            Expression::Identifier(ref data) => {
+                // strict-mode es5 does not allow assigning to "eval" or "arguments".
+                if self.strict_mode && (data.data == "eval" || data.data == "arguments") {
+                    span_err!(lhs.span, "cannot assign to `{}` in strict mode", data.data);
+                }
+
+                PatternOrExpression::Pattern(Spanned {
+                    span: lhs.span,
+                    data    : Pattern::Identifier(data.clone())
+                })
+            },
             _ => PatternOrExpression::Expr(Box::new(lhs))
         };
 
@@ -1719,6 +1722,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let kind = try!(self.eat_update_operator());
             let kind_span = self.last_span;
             let expr = Box::new(try!(self.unary_expression()));
+            let _ = try!(self.verify_assignment_lhs(*expr.clone()));
             let span = Span::new(kind_span.start, expr.span.stop);
             Ok(Spanned::new(span, Expression::Update(kind, true, expr)))
         }
@@ -1760,6 +1764,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let expr = try!(self.left_hand_side_expression());
         if next_token_is!(self, true, TokenKind::DoublePlus,
                           TokenKind::DoubleMinus) {
+            let _ = try!(self.verify_assignment_lhs(expr.clone()));
             let token = self.next_token(true).unwrap();
             // this is a restricted production. If this token is
             // preceded by a newline, we have to insert a semicolon

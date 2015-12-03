@@ -124,7 +124,6 @@ pub enum Expression {
     Object(Vec<Property>),
     Function(Box<Function>),
     Unary(UnaryOperator, bool, Box<Expression>),
-    Update(UpdateOperator, bool, Box<Expression>),
     Binary(BinaryOperator, Box<Expression>, Box<Expression>),
     ReferenceAssignment(InternedString, Box<Expression>),
     LValueAssignment(Box<Expression>, Box<Expression>),
@@ -233,9 +232,9 @@ pub struct CatchClause {
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Literal {
-    String(String),
+    String(InternedString),
     Boolean(bool),
     Null,
     Numeric(f64),
-    RegExp(String, String)
+    RegExp(InternedString, InternedString)
 }

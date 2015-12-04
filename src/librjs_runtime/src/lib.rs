@@ -1,4 +1,4 @@
-//#![deny(warnings)]
+// #![deny(warnings)]
 
 extern crate librjs_syntax;
 extern crate bit_set;

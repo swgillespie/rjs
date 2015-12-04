@@ -30,7 +30,7 @@ use std::default::Default;
 #[derive(Copy, Clone, Debug, Default)]
 struct BuilderState {
     uses_with: bool,
-    uses_arguments_ident: bool
+    uses_arguments_ident: bool,
 }
 
 impl BuilderState {
@@ -48,7 +48,7 @@ impl BuilderState {
 /// intermediate language that is transformed into bytecode.
 pub struct HirBuilder<'a> {
     interner: &'a mut StringInterner,
-    state: BuilderState
+    state: BuilderState,
 }
 
 impl<'a> HirBuilder<'a> {
@@ -56,7 +56,7 @@ impl<'a> HirBuilder<'a> {
     pub fn new(interner: &'a mut StringInterner) -> HirBuilder {
         HirBuilder {
             interner: interner,
-            state: BuilderState::new()
+            state: BuilderState::new(),
         }
     }
 
@@ -85,22 +85,32 @@ impl<'a> HirBuilder<'a> {
             ast::Statement::Debugger => self.lower_debugger_statement(),
             ast::Statement::With(ref expr, ref stmt) => self.lower_with_statement(expr, stmt),
             ast::Statement::Return(ref expr) => self.lower_return_statement(expr.as_ref()),
-            ast::Statement::Label(ref label, ref statement) => self.lower_labelled_statement(label, statement),
+            ast::Statement::Label(ref label, ref statement) => {
+                self.lower_labelled_statement(label, statement)
+            }
             ast::Statement::Break(ref label) => self.lower_break_statement(label.as_ref()),
             ast::Statement::Continue(ref label) => self.lower_continue_statement(label.as_ref()),
-            ast::Statement::If(ref cond, ref true_branch, ref false_branch) =>
-                self.lower_if_statement(cond, true_branch, false_branch.as_ref().map(|x| &**x)),
+            ast::Statement::If(ref cond, ref true_branch, ref false_branch) => {
+                self.lower_if_statement(cond, true_branch, false_branch.as_ref().map(|x| &**x))
+            }
             ast::Statement::Switch(ref cond, ref cases) => self.lower_switch_statement(cond, cases),
             ast::Statement::Throw(ref expr) => self.lower_throw_statement(expr),
-            ast::Statement::Try(ref body, ref catch, ref finally) =>
-                self.lower_try_statement(body, catch.as_ref(), finally.as_ref().map(|x| &**x)),
+            ast::Statement::Try(ref body, ref catch, ref finally) => {
+                self.lower_try_statement(body, catch.as_ref(), finally.as_ref().map(|x| &**x))
+            }
             ast::Statement::While(ref cond, ref body) => self.lower_while_statement(cond, body),
-            ast::Statement::DoWhile(ref cond, ref body) => self.lower_do_while_statement(cond, body),
-            ast::Statement::For(ref init, ref condition, ref update, ref body) =>
-                self.lower_for_statement(init.as_ref(), condition.as_ref(), update.as_ref(), body),
-            ast::Statement::ForIn(ref init, ref binding, ref body) =>
-                self.lower_for_in_statement(init, binding, body),
-            ast::Statement::Declaration(ref declaration) => self.lower_declaration_statement(declaration)
+            ast::Statement::DoWhile(ref cond, ref body) => {
+                self.lower_do_while_statement(cond, body)
+            }
+            ast::Statement::For(ref init, ref condition, ref update, ref body) => {
+                self.lower_for_statement(init.as_ref(), condition.as_ref(), update.as_ref(), body)
+            }
+            ast::Statement::ForIn(ref init, ref binding, ref body) => {
+                self.lower_for_in_statement(init, binding, body)
+            }
+            ast::Statement::Declaration(ref declaration) => {
+                self.lower_declaration_statement(declaration)
+            }
         }
     }
 
@@ -110,7 +120,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     fn lower_block(&mut self, block: &[ast::SpannedStatement]) -> hir::Statement {
-        let lowered_stmts : Vec<_> = block.iter().map(|s| self.lower_statement(s)).collect();
+        let lowered_stmts: Vec<_> = block.iter().map(|s| self.lower_statement(s)).collect();
         hir::Statement::Block(lowered_stmts)
     }
 
@@ -126,7 +136,8 @@ impl<'a> HirBuilder<'a> {
 
     fn lower_with_statement(&mut self,
                             obj: &ast::SpannedExpression,
-                            body: &ast::SpannedStatement) -> hir::Statement {
+                            body: &ast::SpannedStatement)
+                            -> hir::Statement {
         self.state.uses_with = true;
         let lowered_obj = self.lower_expression(obj);
         let lowered_body = self.lower_statement(body);
@@ -138,7 +149,10 @@ impl<'a> HirBuilder<'a> {
         hir::Statement::Return(lowered)
     }
 
-    fn lower_labelled_statement(&mut self, label: &ast::Identifier, stmt: &ast::SpannedStatement) -> hir::Statement {
+    fn lower_labelled_statement(&mut self,
+                                label: &ast::Identifier,
+                                stmt: &ast::SpannedStatement)
+                                -> hir::Statement {
         let interned_label = self.interner.intern(&label.data);
         let lowered_stmt = self.lower_statement(stmt);
         hir::Statement::Label(interned_label, Box::new(lowered_stmt))
@@ -157,14 +171,18 @@ impl<'a> HirBuilder<'a> {
     fn lower_if_statement(&mut self,
                           condition: &ast::SpannedExpression,
                           true_branch: &ast::SpannedStatement,
-                          false_branch: Option<&ast::SpannedStatement>)-> hir::Statement {
+                          false_branch: Option<&ast::SpannedStatement>)
+                          -> hir::Statement {
         let cond = self.lower_expression(condition);
         let true_branch = self.lower_statement(true_branch);
         let false_branch = false_branch.map(|f| Box::new(self.lower_statement(f)));
         hir::Statement::If(cond, Box::new(true_branch), false_branch)
     }
 
-    fn lower_switch_statement(&mut self, cond: &ast::SpannedExpression, cases: &[ast::SwitchCase]) -> hir::Statement {
+    fn lower_switch_statement(&mut self,
+                              cond: &ast::SpannedExpression,
+                              cases: &[ast::SwitchCase])
+                              -> hir::Statement {
         // TODO this is a pretty nice optimization opportunity
         let cond = self.lower_expression(cond);
         let cases = cases.iter().map(|c| self.lower_switch_case(c)).collect();
@@ -172,14 +190,16 @@ impl<'a> HirBuilder<'a> {
     }
 
     fn lower_switch_case(&mut self, case: &ast::SwitchCase) -> hir::SwitchCase {
-        let test = case.test.as_ref()
-            .map(|t| self.lower_expression(&t));
-        let body = case.body.iter()
-            .map(|b| self.lower_statement(b))
-            .collect::<Vec<_>>();
+        let test = case.test
+                       .as_ref()
+                       .map(|t| self.lower_expression(&t));
+        let body = case.body
+                       .iter()
+                       .map(|b| self.lower_statement(b))
+                       .collect::<Vec<_>>();
         hir::SwitchCase {
             test: test,
-            body: body
+            body: body,
         }
     }
 
@@ -191,7 +211,8 @@ impl<'a> HirBuilder<'a> {
     fn lower_try_statement(&mut self,
                            body: &ast::SpannedStatement,
                            catch: Option<&ast::CatchClause>,
-                           finally: Option<&ast::SpannedStatement>) -> hir::Statement {
+                           finally: Option<&ast::SpannedStatement>)
+                           -> hir::Statement {
         // TODO optimization. It would be nice to have a general HIR node for try/finally-like
         // constructs, since a with is basically a try-finally with extra scoping rules.
         let lowered_body = self.lower_statement(body);
@@ -208,13 +229,14 @@ impl<'a> HirBuilder<'a> {
         let interned_body = self.lower_statement(&*catch.body);
         hir::CatchClause {
             param: interned_param,
-            body: Box::new(interned_body)
+            body: Box::new(interned_body),
         }
     }
 
     fn lower_while_statement(&mut self,
                              cond: &ast::SpannedExpression,
-                             stmt: &ast::SpannedStatement) -> hir::Statement {
+                             stmt: &ast::SpannedStatement)
+                             -> hir::Statement {
         // TODO while loops can't be desugared into do while without a generalized goto statement,
         // which ECMAScript does not have. Maybe we can add one to the HIR?
         let lowered_cond = self.lower_expression(cond);
@@ -224,17 +246,19 @@ impl<'a> HirBuilder<'a> {
 
     fn lower_do_while_statement(&mut self,
                                 cond: &ast::SpannedExpression,
-                                stmt: &ast::SpannedStatement) -> hir::Statement {
+                                stmt: &ast::SpannedStatement)
+                                -> hir::Statement {
         let lowered_cond = self.lower_expression(cond);
         let lowered_body = self.lower_statement(stmt);
         hir::Statement::DoWhile(lowered_cond, Box::new(lowered_body))
     }
 
     fn lower_for_statement(&mut self,
-                          init: Option<&ast::ForInit>,
-                          condition: Option<&ast::SpannedExpression>,
-                          update: Option<&ast::SpannedExpression>,
-                          body: &ast::SpannedStatement) -> hir::Statement {
+                           init: Option<&ast::ForInit>,
+                           condition: Option<&ast::SpannedExpression>,
+                           update: Option<&ast::SpannedExpression>,
+                           body: &ast::SpannedStatement)
+                           -> hir::Statement {
         // the goal of this stage is to lower a for loop into a while loop, like this:
         // for(init, cond, update) body -> init; while(cond) { body; update }
         // we handle this on a case-by-case basis, since all three of init, cond, and update
@@ -275,21 +299,26 @@ impl<'a> HirBuilder<'a> {
 
     fn lower_for_init(&mut self, init: &ast::ForInit) -> hir::Statement {
         match *init {
-            ast::ForInit::VarDec(ref decls) => hir::Statement::Declaration(self.lower_declaration(&decls.data)),
-            ast::ForInit::Expr(ref expr) => self.lower_expression_statement(expr)
+            ast::ForInit::VarDec(ref decls) => {
+                hir::Statement::Declaration(self.lower_declaration(&decls.data))
+            }
+            ast::ForInit::Expr(ref expr) => self.lower_expression_statement(expr),
         }
     }
 
     fn lower_for_in_statement(&mut self,
-                             init: &ast::ForInit,
-                             binding: &ast::SpannedExpression,
-                             body: &ast::SpannedStatement) -> hir::Statement {
+                              init: &ast::ForInit,
+                              binding: &ast::SpannedExpression,
+                              body: &ast::SpannedStatement)
+                              -> hir::Statement {
         // TODO for-in statements are a little special, so we don't desugar them for now.
         // we should strive to eliminate ForIn from the HIR at some point.
         let lowered_init = match *init {
             // ForInit will be obsolete if we remove ForIn for the HIR
             ast::ForInit::Expr(ref expr) => hir::ForInit::Expr(self.lower_expression(expr)),
-            ast::ForInit::VarDec(ref decl) => hir::ForInit::VarDec(self.lower_declaration(&decl.data))
+            ast::ForInit::VarDec(ref decl) => {
+                hir::ForInit::VarDec(self.lower_declaration(&decl.data))
+            }
         };
 
         let lowered_binding = self.lower_expression(binding);
@@ -302,11 +331,12 @@ impl<'a> HirBuilder<'a> {
         hir::Statement::Declaration(decl)
     }
 
-    fn lower_declaration(&mut self,
-                        decl: &ast::Declaration) -> hir::Declaration {
+    fn lower_declaration(&mut self, decl: &ast::Declaration) -> hir::Declaration {
         match *decl {
-            ast::Declaration::Function(ref func) => hir::Declaration::Function(self.lower_function(func)),
-            ast::Declaration::Variable(ref vardec) => self.lower_variable_declarators(vardec)
+            ast::Declaration::Function(ref func) => {
+                hir::Declaration::Function(self.lower_function(func))
+            }
+            ast::Declaration::Variable(ref vardec) => self.lower_variable_declarators(vardec),
         }
     }
 
@@ -346,19 +376,25 @@ impl<'a> HirBuilder<'a> {
         function
     }
 
-    fn lower_variable_declarators(&mut self, decls: &[ast::VariableDeclarator]) -> hir::Declaration {
-        let lowered_decls : Vec<_> = decls.iter()
-            .map(|d| {
-                let ast::Pattern::Identifier(ref ident) = d.id.data;
-                self.check_name(&ident.data);
-                let interned_name = self.interner.intern(&ident.data);
-                let lowered_value = d.initial_value.as_ref().map(|s| self.lower_expression(s));
-                hir::VariableDeclarator {
-                    name: interned_name,
-                    initial_value: lowered_value
-                }
-            })
-            .collect();
+    fn lower_variable_declarators(&mut self,
+                                  decls: &[ast::VariableDeclarator])
+                                  -> hir::Declaration {
+        let lowered_decls: Vec<_> = decls.iter()
+                                         .map(|d| {
+                                             let ast::Pattern::Identifier(ref ident) = d.id.data;
+                                             self.check_name(&ident.data);
+                                             let interned_name = self.interner.intern(&ident.data);
+                                             let lowered_value = d.initial_value
+                                                                  .as_ref()
+                                                                  .map(|s| {
+                                                                      self.lower_expression(s)
+                                                                  });
+                                             hir::VariableDeclarator {
+                                                 name: interned_name,
+                                                 initial_value: lowered_value,
+                                             }
+                                         })
+                                         .collect();
 
         hir::Declaration::Variable(lowered_decls)
     }
@@ -370,20 +406,27 @@ impl<'a> HirBuilder<'a> {
             ast::Expression::Object(ref properties) => self.lower_object_literal(properties),
             ast::Expression::Function(ref function) => self.lower_function_expression(function),
             ast::Expression::Unary(op, prefix, ref expr) => self.lower_unary_op(op, prefix, expr),
-            ast::Expression::Binary(op, ref left, ref right) => self.lower_binary_op(op, left, right),
+            ast::Expression::Binary(op, ref left, ref right) => {
+                self.lower_binary_op(op, left, right)
+            }
             ast::Expression::Update(op, prefix, ref expr) => self.lower_update_op(op, prefix, expr),
-            ast::Expression::Logical(op, ref left, ref right) => self.lower_logical_op(op, left, right),
-            ast::Expression::Member(ref base, ref target, calculated) => self.lower_member_expression(base, target, calculated),
-            ast::Expression::Assignment(op, ref target, ref value) => self.lower_assignment(op, target, value),
-            ast::Expression::Conditional(ref cond, ref true_value, ref false_value) =>
-                self.lower_conditional_expression(cond, true_value, false_value),
-            ast::Expression::Call(ref base, ref args) =>
-                self.lower_call_expression(base, args),
-            ast::Expression::New(ref base, ref args) =>
-                self.lower_new_expression(base, args),
+            ast::Expression::Logical(op, ref left, ref right) => {
+                self.lower_logical_op(op, left, right)
+            }
+            ast::Expression::Member(ref base, ref target, calculated) => {
+                self.lower_member_expression(base, target, calculated)
+            }
+            ast::Expression::Assignment(op, ref target, ref value) => {
+                self.lower_assignment(op, target, value)
+            }
+            ast::Expression::Conditional(ref cond, ref true_value, ref false_value) => {
+                self.lower_conditional_expression(cond, true_value, false_value)
+            }
+            ast::Expression::Call(ref base, ref args) => self.lower_call_expression(base, args),
+            ast::Expression::New(ref base, ref args) => self.lower_new_expression(base, args),
             ast::Expression::Sequence(ref seq) => self.lower_sequence(seq),
             ast::Expression::Identifier(ref ident) => self.lower_identifier(ident),
-            ast::Expression::Literal(ref lit) => self.lower_literal(lit)
+            ast::Expression::Literal(ref lit) => self.lower_literal(lit),
         }
     }
 
@@ -393,16 +436,18 @@ impl<'a> HirBuilder<'a> {
     }
 
     fn lower_array_literal(&mut self,
-                           values: &[Option<ast::SpannedExpression>]) -> hir::Expression {
-        let lowered_elements : Vec<_> = values.iter()
-            .map(|s| s.as_ref().map(|q| self.lower_expression(q)))
-            .collect();
+                           values: &[Option<ast::SpannedExpression>])
+                           -> hir::Expression {
+        let lowered_elements: Vec<_> = values.iter()
+                                             .map(|s| s.as_ref().map(|q| self.lower_expression(q)))
+                                             .collect();
         hir::Expression::Array(lowered_elements)
     }
 
-    fn lower_object_literal(&mut self,
-                            properties: &[ast::Property]) -> hir::Expression {
-        let lowered_properties : Vec<_> = properties.iter().map(|p| self.lower_property(p)).collect();
+    fn lower_object_literal(&mut self, properties: &[ast::Property]) -> hir::Expression {
+        let lowered_properties: Vec<_> = properties.iter()
+                                                   .map(|p| self.lower_property(p))
+                                                   .collect();
         hir::Expression::Object(lowered_properties)
     }
 
@@ -419,8 +464,11 @@ impl<'a> HirBuilder<'a> {
                     // TODO have to be careful here, this should be in sync with [[ToString]]
                     // pretty sure this will have edge case problems
                     ast::Literal::Numeric(data) => self.interner.intern(data.to_string()),
-                    ref unknown => panic!("literal type and property name {:?} made it to hir lowering, \
-                                           despite not being a legal property name", unknown)
+                    ref unknown => {
+                        panic!("literal type and property name {:?} made it to hir lowering, \
+                                despite not being a legal property name",
+                               unknown)
+                    }
                 }
             }
         };
@@ -429,20 +477,21 @@ impl<'a> HirBuilder<'a> {
         let kind = match prop.kind {
             ast::PropertyKind::Init => hir::PropertyKind::Init,
             ast::PropertyKind::Get => hir::PropertyKind::Get,
-            ast::PropertyKind::Set => hir::PropertyKind::Set
+            ast::PropertyKind::Set => hir::PropertyKind::Set,
         };
 
         hir::Property {
             key: name,
             value: Box::new(value),
-            kind: kind
+            kind: kind,
         }
     }
 
     fn lower_unary_op(&mut self,
                       op: ast::UnaryOperator,
                       prefix: bool,
-                      expr: &ast::SpannedExpression) -> hir::Expression {
+                      expr: &ast::SpannedExpression)
+                      -> hir::Expression {
         let lowered_op = self.lower_unary_operator(op);
         let lowered_expr = self.lower_expression(expr);
         hir::Expression::Unary(lowered_op, prefix, Box::new(lowered_expr))
@@ -456,14 +505,15 @@ impl<'a> HirBuilder<'a> {
             ast::UnaryOperator::BitwiseNot => hir::UnaryOperator::BitwiseNot,
             ast::UnaryOperator::Typeof => hir::UnaryOperator::Typeof,
             ast::UnaryOperator::Void => hir::UnaryOperator::Void,
-            ast::UnaryOperator::Delete => hir::UnaryOperator::Delete
+            ast::UnaryOperator::Delete => hir::UnaryOperator::Delete,
         }
     }
 
     fn lower_binary_op(&mut self,
                        op: ast::BinaryOperator,
                        left: &ast::SpannedExpression,
-                       right: &ast::SpannedExpression) -> hir::Expression {
+                       right: &ast::SpannedExpression)
+                       -> hir::Expression {
         let lowered_op = self.lower_binary_operator(op);
         let lowered_left = self.lower_expression(left);
         let lowered_right = self.lower_expression(right);
@@ -492,14 +542,15 @@ impl<'a> HirBuilder<'a> {
             ast::BinaryOperator::BitwiseXor => hir::BinaryOperator::BitwiseXor,
             ast::BinaryOperator::BitwiseAnd => hir::BinaryOperator::BitwiseAnd,
             ast::BinaryOperator::In => hir::BinaryOperator::In,
-            ast::BinaryOperator::Instanceof => hir::BinaryOperator::Instanceof
+            ast::BinaryOperator::Instanceof => hir::BinaryOperator::Instanceof,
         }
     }
 
     fn lower_logical_op(&mut self,
-                       op: ast::LogicalOperator,
-                       left: &ast::SpannedExpression,
-                       right: &ast::SpannedExpression) -> hir::Expression {
+                        op: ast::LogicalOperator,
+                        left: &ast::SpannedExpression,
+                        right: &ast::SpannedExpression)
+                        -> hir::Expression {
         let lowered_op = self.lower_logical_operator(op);
         let lowered_left = self.lower_expression(left);
         let lowered_right = self.lower_expression(right);
@@ -509,18 +560,19 @@ impl<'a> HirBuilder<'a> {
     fn lower_logical_operator(&mut self, op: ast::LogicalOperator) -> hir::LogicalOperator {
         match op {
             ast::LogicalOperator::Or => hir::LogicalOperator::Or,
-            ast::LogicalOperator::And => hir::LogicalOperator::And
+            ast::LogicalOperator::And => hir::LogicalOperator::And,
         }
     }
 
     fn lower_update_op(&mut self,
                        op: ast::UpdateOperator,
                        prefix: bool,
-                       expr: &ast::SpannedExpression) -> hir::Expression {
+                       expr: &ast::SpannedExpression)
+                       -> hir::Expression {
         let lowered_expr = self.lower_expression(expr);
         let actual_op = match op {
             ast::UpdateOperator::Increment => hir::BinaryOperator::Plus,
-            ast::UpdateOperator::Decrement => hir::BinaryOperator::Minus
+            ast::UpdateOperator::Decrement => hir::BinaryOperator::Minus,
         };
 
         if !prefix {
@@ -541,7 +593,7 @@ impl<'a> HirBuilder<'a> {
                     Box::new(hir::Expression::Binary(
                         actual_op,
                         Box::new(hir::Expression::Identifier(old_sym)),
-                        Box::new(hir::Expression::Literal(hir::Literal::Numeric(1f64))))))
+                        Box::new(hir::Expression::Literal(hir::Literal::Numeric(1f64)))))),
             };
 
             hir::Expression::Sequence(
@@ -578,23 +630,19 @@ impl<'a> HirBuilder<'a> {
                     Box::new(hir::Expression::Identifier(new_sym))),
                 expr => hir::Expression::LValueAssignment(
                     Box::new(expr.clone()),
-                    Box::new(hir::Expression::Identifier(new_sym)))
+                    Box::new(hir::Expression::Identifier(new_sym))),
             };
 
-            hir::Expression::Sequence(
-                vec![
-                    first_stmt,
-                    hir::Statement::Expression(assignment)
-                ],
-                Box::new(hir::Expression::Identifier(new_sym))
-            )
+            hir::Expression::Sequence(vec![first_stmt, hir::Statement::Expression(assignment)],
+                                      Box::new(hir::Expression::Identifier(new_sym)))
         }
     }
 
     fn lower_member_expression(&mut self,
                                base: &ast::SpannedExpression,
                                target: &ast::SpannedExpression,
-                               calculated: bool) -> hir::Expression {
+                               calculated: bool)
+                               -> hir::Expression {
         let lowered_base = self.lower_expression(base);
         if calculated {
             // this is a member expression utilizing the index operator. The
@@ -610,7 +658,8 @@ impl<'a> HirBuilder<'a> {
                 self.interner.intern(&value.data)
             } else {
                 panic!("parser emitted a non-calculated member expression with a non-identifier \
-                        target node! AST node: {:?}", target);
+                        target node! AST node: {:?}",
+                       target);
             };
 
             hir::Expression::IdentifierMember(Box::new(lowered_base), ident)
@@ -620,7 +669,8 @@ impl<'a> HirBuilder<'a> {
     fn lower_assignment(&mut self,
                         op: ast::AssignmentOperator,
                         target: &ast::PatternOrExpression,
-                        value: &ast::SpannedExpression) -> hir::Expression {
+                        value: &ast::SpannedExpression)
+                        -> hir::Expression {
         // this stage desugars the many different assignment operators into an expression
         // that only uses the `=` operator.
         match *target {
@@ -634,7 +684,8 @@ impl<'a> HirBuilder<'a> {
 
                 if op == ast::AssignmentOperator::Equal {
                     // if this is a simple equals-assignment, we don't have to desugar anything.
-                    return hir::Expression::ReferenceAssignment(interned_target, Box::new(lowered_value));
+                    return hir::Expression::ReferenceAssignment(interned_target,
+                                                                Box::new(lowered_value));
                 }
 
                 // if it's not, we have to desugar.
@@ -643,29 +694,27 @@ impl<'a> HirBuilder<'a> {
                 // into
                 //   <ident> = <ident> * 42
                 let binop = self.assignment_op_to_binop(op);
-                let new_value = hir::Expression::Binary(
-                    binop,
-                    Box::new(hir::Expression::Identifier(interned_target)),
-                    Box::new(lowered_value)
-                );
+                let new_value =
+                    hir::Expression::Binary(binop,
+                                            Box::new(hir::Expression::Identifier(interned_target)),
+                                            Box::new(lowered_value));
 
                 hir::Expression::ReferenceAssignment(interned_target, Box::new(new_value))
-            },
+            }
             ast::PatternOrExpression::Expr(ref expr) => {
                 // even if the LHS is an expression, we employ the same sort of desugar strategy.
                 let lowered_lhs = self.lower_expression(expr);
                 let lowered_value = self.lower_expression(value);
 
                 if op == ast::AssignmentOperator::Equal {
-                    return hir::Expression::LValueAssignment(Box::new(lowered_lhs), Box::new(lowered_value));
+                    return hir::Expression::LValueAssignment(Box::new(lowered_lhs),
+                                                             Box::new(lowered_value));
                 }
 
                 let binop = self.assignment_op_to_binop(op);
-                let new_value = hir::Expression::Binary(
-                    binop,
-                    Box::new(lowered_lhs.clone()),
-                    Box::new(lowered_value)
-                );
+                let new_value = hir::Expression::Binary(binop,
+                                                        Box::new(lowered_lhs.clone()),
+                                                        Box::new(lowered_value));
 
                 hir::Expression::LValueAssignment(Box::new(lowered_lhs), Box::new(new_value))
             }
@@ -685,14 +734,15 @@ impl<'a> HirBuilder<'a> {
             ast::AssignmentOperator::TripleRightShiftEqual => hir::BinaryOperator::TripleRightShift,
             ast::AssignmentOperator::BitwiseOrEqual => hir::BinaryOperator::BitwiseOr,
             ast::AssignmentOperator::BitwiseXorEqual => hir::BinaryOperator::BitwiseXor,
-            ast::AssignmentOperator::BitwiseAndEqual => hir::BinaryOperator::BitwiseAnd
+            ast::AssignmentOperator::BitwiseAndEqual => hir::BinaryOperator::BitwiseAnd,
         }
     }
 
     fn lower_conditional_expression(&mut self,
                                     cond: &ast::SpannedExpression,
                                     true_value: &ast::SpannedExpression,
-                                    false_value: &ast::SpannedExpression) -> hir::Expression {
+                                    false_value: &ast::SpannedExpression)
+                                    -> hir::Expression {
         // desugar expression of the form "cond ? true_value : false_value" into
         // var (gensym);
         // if (cond) { (gensym) = true_value } else { (gensym) = false_value }
@@ -719,22 +769,25 @@ impl<'a> HirBuilder<'a> {
 
         // this doesn't directly translate back to ES, due to the additional semantics of the
         // HIR "Sequence" node, which is more general than ECMAScript's comma operator.
-        hir::Expression::Sequence(vec![desugared], Box::new(hir::Expression::Identifier(local)))
+        hir::Expression::Sequence(vec![desugared],
+                                  Box::new(hir::Expression::Identifier(local)))
     }
 
     fn lower_call_expression(&mut self,
                              base: &ast::SpannedExpression,
-                             args: &[ast::SpannedExpression]) -> hir::Expression {
+                             args: &[ast::SpannedExpression])
+                             -> hir::Expression {
         let lowered_base = self.lower_expression(base);
-        let lowered_args : Vec<_> = args.iter().map(|s| self.lower_expression(&s)).collect();
+        let lowered_args: Vec<_> = args.iter().map(|s| self.lower_expression(&s)).collect();
         hir::Expression::Call(Box::new(lowered_base), lowered_args)
     }
 
     fn lower_new_expression(&mut self,
-                             base: &ast::SpannedExpression,
-                             args: &[ast::SpannedExpression]) -> hir::Expression {
+                            base: &ast::SpannedExpression,
+                            args: &[ast::SpannedExpression])
+                            -> hir::Expression {
         let lowered_base = self.lower_expression(base);
-        let lowered_args : Vec<_> = args.iter().map(|s| self.lower_expression(&s)).collect();
+        let lowered_args: Vec<_> = args.iter().map(|s| self.lower_expression(&s)).collect();
         hir::Expression::New(Box::new(lowered_base), lowered_args)
     }
 
@@ -749,8 +802,10 @@ impl<'a> HirBuilder<'a> {
             ast::Literal::Boolean(value) => hir::Literal::Boolean(value),
             ast::Literal::Null => hir::Literal::Null,
             ast::Literal::Numeric(value) => hir::Literal::Numeric(value),
-            ast::Literal::RegExp(ref regex, ref flags) => hir::Literal::RegExp(self.interner.intern(regex), self.interner.intern(flags)),
-            ast::Literal::String(ref value) => hir::Literal::String(self.interner.intern(value))
+            ast::Literal::RegExp(ref regex, ref flags) => {
+                hir::Literal::RegExp(self.interner.intern(regex), self.interner.intern(flags))
+            }
+            ast::Literal::String(ref value) => hir::Literal::String(self.interner.intern(value)),
         };
 
         hir::Expression::Literal(hir_lit)
@@ -763,12 +818,12 @@ impl<'a> HirBuilder<'a> {
         // value becomes the value of the entire expression.
         let (statements, expr) = seq.split_at(seq.len() - 1);
         debug_assert!(expr.len() == 1);
-        let lowered_statements : Vec<_> = statements.iter()
-            .map(|e| {
-                let lowered_expr = self.lower_expression(e);
-                hir::Statement::Expression(lowered_expr)
-            })
-            .collect();
+        let lowered_statements: Vec<_> = statements.iter()
+                                                   .map(|e| {
+                                                       let lowered_expr = self.lower_expression(e);
+                                                       hir::Statement::Expression(lowered_expr)
+                                                   })
+                                                   .collect();
         let final_expr = self.lower_expression(&expr[0]);
         hir::Expression::Sequence(lowered_statements, Box::new(final_expr))
     }
@@ -784,7 +839,7 @@ fn is_use_strict_expr(stmt: &ast::Statement) -> bool {
     if let ast::Statement::Expression(ref expr) = *stmt {
         if let ast::Expression::Literal(ast::Literal::String(ref s)) = expr.data {
             if s == "use strict" {
-                return true
+                return true;
             }
         }
     }

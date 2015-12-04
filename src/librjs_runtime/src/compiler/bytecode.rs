@@ -12,7 +12,7 @@ pub enum Opcode {
     Pop,
     /// Swaps the position of TOS and TOS-1 on the stack.
     Rotate,
-    /* unary operations */
+    // unary operations
     /// Pops a value from the stack and pushes `-value`
     /// onto the stack.
     Neg,
@@ -28,7 +28,7 @@ pub enum Opcode {
     /// Pops a value from the stack and pushes `typeof value`
     /// onto the stack.
     Typeof,
-    /* binary arithmetic operations */
+    // binary arithmetic operations
     /// Pops two values from the stack, adds them, and pushes
     /// the result onto the stack.
     Add,
@@ -70,14 +70,14 @@ pub enum Opcode {
     /// first value is an instanceof the second value, and pushes
     /// the result onto the stack.
     InstanceOf,
-    /* logical operators */
+    // logical operators
     /// Pops two values `x` and `y` from the stack, calculates `x && y`,
     /// and pushes the result onto the stack.
     And,
     /// Pops two values `x` and `y` from the stack, calculates `x || y`,
     /// and pushes the result onto the stack.
     Or,
-    /* comparison operators */
+    // comparison operators
     /// Pops two values from the stack and pushes a `true` if the two
     /// values are equal.
     Eq,
@@ -90,7 +90,7 @@ pub enum Opcode {
     /// Pops two values from the stack and pushes a `true` if the first
     /// value is greater than or equal to the second value.
     GreaterThanEq,
-    /* property operations */
+    // property operations
     /// Pops a value from the stack, deletes the property
     /// named by the parameter from it, and pushes `true`
     /// onto the stack if the property deletion was successful
@@ -113,7 +113,7 @@ pub enum Opcode {
     /// Pops an object, a string, and a value from the stack and calls
     /// [[Put]] upon the property with the string name.
     PutElement,
-    /* with statement opcodes */
+    // with statement opcodes
     /// Pops an object from the stack and uses it to enter a `with` block,
     /// which exposes the object's properties as identifiers.
     EnterWith,
@@ -125,7 +125,7 @@ pub enum Opcode {
     /// Pops a value off the stack and stores it to the value bound by the given identifier
     /// in the environment record.
     StName(InternedString),
-    /* conditional branching */
+    // conditional branching
     /// Pops one element off the stack and, if it is true,
     /// adds the offset to the current PC.
     BrTrue(isize),
@@ -136,7 +136,7 @@ pub enum Opcode {
     Jump(isize),
     /// Invokes the debugger.
     Debugger,
-    /* loading constants */
+    // loading constants
     /// Pushes a constant number onto the stack.
     LdNum(f64),
     /// Pushes a constant boolean onto the stack.
@@ -154,7 +154,7 @@ pub enum Opcode {
     /// be combined with `make_closure` to fill in the free variable vector
     /// with appropriate values.
     LdLambda(usize),
-    /* control flow */
+    // control flow
     /// Pops a value off the stack and returns from the current function
     /// with that value.
     Ret,
@@ -164,17 +164,17 @@ pub enum Opcode {
     /// invokes that function object with the given arguments, pushing the return value
     /// of the function onto the stack.
     Call(usize),
-    /* environment manipulation */
+    // environment manipulation
     /// Pops a value off of the stack and adds it to the current environment
     /// record with the current name.
     Def(InternedString),
     /// Pushes a reference to the current value of `this` onto the stack.
     This,
-    /* branching fixups for the emit stage. These should not persist
-       at runtime */
+    // branching fixups for the emit stage. These should not persist
+    // at runtime
     UnfixedBrTrue(usize),
     UnfixedBrFalse(usize),
     UnfixedJump(usize),
-    /* opcodes emitted by the compiler indicating that an operation is not yet implemented */
-    NotImplemented(&'static str)
+    // opcodes emitted by the compiler indicating that an operation is not yet implemented
+    NotImplemented(&'static str),
 }

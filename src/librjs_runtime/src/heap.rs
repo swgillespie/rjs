@@ -108,7 +108,7 @@ use std::cell::RefCell;
 
 use values::Object;
 
-const DEFAULT_SEGMENT_SIZE : usize = 32;
+const DEFAULT_SEGMENT_SIZE: usize = 32;
 const DEFAULT_ARENA_SIZE: usize = 2;
 
 impl ToHeapObject for StringPtr {
@@ -142,7 +142,7 @@ pub enum HeapObject {
     Number(NumberPtr),
     Boolean(BooleanPtr),
     String(StringPtr),
-    Object(ObjectPtr)
+    Object(ObjectPtr),
 }
 
 impl HeapObject {
@@ -152,7 +152,7 @@ impl HeapObject {
             HeapObject::String(ref mut ptr) => ptr.mark(),
             HeapObject::Object(ref mut ptr) => ptr.mark(),
             HeapObject::Boolean(ref mut ptr) => ptr.mark(),
-            HeapObject::Number(ref mut ptr) => ptr.mark()
+            HeapObject::Number(ref mut ptr) => ptr.mark(),
         }
     }
 
@@ -162,7 +162,7 @@ impl HeapObject {
     fn contains_pointers(&self) -> bool {
         match *self {
             HeapObject::Object(_) => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -174,7 +174,7 @@ impl Trace for HeapObject {
             HeapObject::String(_) => vec![].into_iter(),
             HeapObject::Number(_) => vec![].into_iter(),
             HeapObject::Boolean(_) => vec![].into_iter(),
-            HeapObject::Object(obj) => obj.borrow().trace()
+            HeapObject::Object(obj) => obj.borrow().trace(),
         }
     }
 }
@@ -202,7 +202,7 @@ pub struct Heap {
     number_arena: Arena<f64>,
     boolean_arena: Arena<bool>,
     rooted_set: Vec<(HeapObject, usize)>,
-    allocs_since_last_gc: usize
+    allocs_since_last_gc: usize,
 }
 
 impl Heap {
@@ -214,7 +214,7 @@ impl Heap {
             number_arena: Arena::new(),
             boolean_arena: Arena::new(),
             rooted_set: vec![],
-            allocs_since_last_gc: 0
+            allocs_since_last_gc: 0,
         }
     }
 
@@ -243,7 +243,8 @@ impl Heap {
         } else {
             warn!(target: "gc", "having to expand the heap anyway after performing a gc");
             self.object_arena.add_segment();
-            self.object_arena.allocate()
+            self.object_arena
+                .allocate()
                 .expect("allocation after heap expansion should always succeed")
         };
 
@@ -273,7 +274,8 @@ impl Heap {
         } else {
             warn!(target: "gc", "having to expand the heap anyway after performing a gc");
             self.string_arena.add_segment();
-            self.string_arena.allocate()
+            self.string_arena
+                .allocate()
                 .expect("allocation after heap expansion should always succeed")
         };
 
@@ -303,7 +305,8 @@ impl Heap {
         } else {
             warn!(target: "gc", "having to expand the heap anyway after performing a gc");
             self.number_arena.add_segment();
-            self.number_arena.allocate()
+            self.number_arena
+                .allocate()
                 .expect("allocation after heap expansion should always succeed")
         };
 
@@ -333,7 +336,8 @@ impl Heap {
         } else {
             warn!(target: "gc", "having to expand the heap anyway after performing a gc");
             self.boolean_arena.add_segment();
-            self.boolean_arena.allocate()
+            self.boolean_arena
+                .allocate()
                 .expect("allocation after heap expansion should always succeed")
         };
 
@@ -484,7 +488,7 @@ impl Default for Heap {
 /// to allocate on an Arena if every segment is full, in which case
 /// additional segments must be added.
 struct Arena<T> {
-    segments: Vec<Segment<T>>
+    segments: Vec<Segment<T>>,
 }
 
 impl<T: Default> Arena<T> {
@@ -492,8 +496,8 @@ impl<T: Default> Arena<T> {
     pub fn new() -> Arena<T> {
         Arena {
             segments: (0..DEFAULT_ARENA_SIZE)
-                .map(|_| Segment::new())
-                .collect()
+                          .map(|_| Segment::new())
+                          .collect(),
         }
     }
 
@@ -533,7 +537,8 @@ impl<T: Default> Arena<T> {
     }
 
     fn number_of_allocations(&self) -> usize {
-        self.segments.iter()
+        self.segments
+            .iter()
             .map(|s| s.number_of_allocations())
             .fold(0, |acc, item| acc + item)
     }
@@ -545,7 +550,7 @@ impl<T: Default> Arena<T> {
 struct Segment<T> {
     slots: Vec<RefCell<T>>,
     free_list: Vec<usize>,
-    marked_set: BitSet
+    marked_set: BitSet,
 }
 
 impl<T: Default> Segment<T> {
@@ -554,10 +559,10 @@ impl<T: Default> Segment<T> {
     fn new() -> Segment<T> {
         Segment {
             slots: (0..DEFAULT_SEGMENT_SIZE)
-                .map(|_| RefCell::new(Default::default()))
-                .collect(),
+                       .map(|_| RefCell::new(Default::default()))
+                       .collect(),
             free_list: (0..DEFAULT_SEGMENT_SIZE).collect(),
-            marked_set: BitSet::from_bit_vec(BitVec::from_elem(DEFAULT_SEGMENT_SIZE, true))
+            marked_set: BitSet::from_bit_vec(BitVec::from_elem(DEFAULT_SEGMENT_SIZE, true)),
         }
     }
 
@@ -605,7 +610,7 @@ impl<T: Default> Segment<T> {
 /// liable to be reclaimed if a garbage collection occurs.
 pub struct GcPtr<T> {
     segment: *mut Segment<T>,
-    index: usize
+    index: usize,
 }
 
 impl<T> GcPtr<T> {
@@ -613,7 +618,7 @@ impl<T> GcPtr<T> {
     fn new(segment: &mut Segment<T>, index: usize) -> GcPtr<T> {
         GcPtr {
             segment: segment as *mut _,
-            index: index
+            index: index,
         }
     }
 }
@@ -672,7 +677,7 @@ pub type BooleanPtr = GcPtr<bool>;
 /// destructed.
 pub struct RootedPtr<T: ToHeapObject> {
     heap: *mut Heap,
-    ptr: T
+    ptr: T,
 }
 
 impl<T: ToHeapObject> RootedPtr<T> {
@@ -681,7 +686,7 @@ impl<T: ToHeapObject> RootedPtr<T> {
     pub fn new(heap: &mut Heap, ptr: T) -> RootedPtr<T> {
         let mut ptr = RootedPtr {
             heap: heap as *mut _,
-            ptr: ptr
+            ptr: ptr,
         };
         ptr.root();
         ptr
@@ -794,10 +799,12 @@ mod tests {
         let mut heap = Heap::new();
         let _alloc = heap.allocate_string();
         // alloc is currently rooted
-        assert!(1 == heap.number_of_string_allocations(), "failed to allocate string on heap");
+        assert!(1 == heap.number_of_string_allocations(),
+                "failed to allocate string on heap");
         heap.collect();
         // alloc should not be collected since it is rooted
-        assert!(1 == heap.number_of_string_allocations(), "collected a rooted pointer");
+        assert!(1 == heap.number_of_string_allocations(),
+                "collected a rooted pointer");
     }
 
     #[test]
@@ -806,14 +813,17 @@ mod tests {
         let mut heap = Heap::new();
         {
             let _alloc = heap.allocate_string();
-            assert!(1 == heap.number_of_string_allocations(), "failed to allocate string on heap");
+            assert!(1 == heap.number_of_string_allocations(),
+                    "failed to allocate string on heap");
             heap.collect();
-            assert!(1 == heap.number_of_string_allocations(), "collected a rooted pointer");
+            assert!(1 == heap.number_of_string_allocations(),
+                    "collected a rooted pointer");
         }
 
         // alloc is out of scope and is now unrooted.
         // it should be reclaimed by the next collection
         heap.collect();
-        assert!(0 == heap.number_of_string_allocations(), "failed to collect an unrooted pointer");
+        assert!(0 == heap.number_of_string_allocations(),
+                "failed to collect an unrooted pointer");
     }
 }

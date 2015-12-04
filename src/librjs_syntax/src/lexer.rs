@@ -7,21 +7,18 @@ use char_classes::CharClassExt;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub struct Span {
     pub start: Position,
-    pub stop: Position
+    pub stop: Position,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Position {
     pub col: u32,
-    pub line: u32
+    pub line: u32,
 }
 
 impl Default for Position {
     fn default() -> Position {
-        Position {
-            col: 0,
-            line: 1
-        }
+        Position { col: 0, line: 1 }
     }
 }
 
@@ -29,7 +26,7 @@ impl Span {
     pub fn new(start: Position, stop: Position) -> Span {
         Span {
             start: start,
-            stop: stop
+            stop: stop,
         }
     }
 }
@@ -38,14 +35,14 @@ impl Span {
 pub struct Token {
     pub span: Span,
     pub kind: TokenKind,
-    pub preceded_by_newline: bool
+    pub preceded_by_newline: bool,
 }
 
 impl Token {
     pub fn is_illegal(&self) -> bool {
         match self.kind {
             TokenKind::Illegal(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -90,13 +87,13 @@ impl Token {
             TokenKind::Export => "export",
             TokenKind::Import => "import",
             // other things can't be converted to an identifier
-            _ => return None
+            _ => return None,
         };
 
         Some(Token {
             span: self.span,
             kind: TokenKind::Identifier(string.to_string()),
-            preceded_by_newline: self.preceded_by_newline
+            preceded_by_newline: self.preceded_by_newline,
         })
     }
 }
@@ -193,8 +190,8 @@ pub enum TokenKind {
     Div,
     DivEquals,
     // Literals, section 7.8
-    NullLiteral,                 // 7.8.1
-    BooleanLiteral(bool),        // 7.8.2
+    NullLiteral, // 7.8.1
+    BooleanLiteral(bool), // 7.8.2
     StringLiteral(String),
     RegularExpressionLiteral(String, String),
     // Numeric literals, section 7.8.3
@@ -207,25 +204,25 @@ pub enum TokenKind {
     // Token indicating that an error occured during lexing.
     // The parser has no rules that accept this token, so it
     // will always cause an error.
-    Illegal(String)
+    Illegal(String),
 }
 
 include!(concat!(env!("OUT_DIR"), "/reserved_words.rs"));
 
-pub struct Lexer<I: Iterator<Item=char>> {
+pub struct Lexer<I: Iterator<Item = char>> {
     position_col: u32,
     position_line: u32,
     stream: PutBackN<I>,
-    prev_token_was_newline: bool
+    prev_token_was_newline: bool,
 }
 
-impl<I: Iterator<Item=char>> Lexer<I> {
+impl<I: Iterator<Item = char>> Lexer<I> {
     pub fn new(iter: I) -> Lexer<I> {
         Lexer {
             position_col: 0,
             position_line: 1,
             stream: PutBackN::new(iter),
-            prev_token_was_newline: false
+            prev_token_was_newline: false,
         }
     }
 
@@ -234,15 +231,15 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             span: Span {
                 start: Position {
                     col: self.position_col,
-                    line: self.position_line
+                    line: self.position_line,
                 },
                 stop: Position {
                     col: self.position_col,
-                    line: self.position_line
-                }
+                    line: self.position_line,
+                },
             },
             kind: TokenKind::Illegal(message),
-            preceded_by_newline: self.prev_token_was_newline
+            preceded_by_newline: self.prev_token_was_newline,
         }
     }
 
@@ -254,7 +251,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
     fn unadvance(&mut self, c: char) {
         match c {
             '\n' | '\r' | '\u{2028}' | '\u{2029}' => panic!("unadvanced a line terminator!"),
-            _ => ()
+            _ => (),
         }
 
         self.stream.put_back(c);
@@ -275,18 +272,18 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             span: Span {
                 start: Position {
                     col: self.position_col,
-                    line: self.position_line
+                    line: self.position_line,
                 },
                 stop: Position {
                     col: self.position_col + 1,
-                    line: self.position_line
-                }
+                    line: self.position_line,
+                },
             },
             kind: kind,
-            preceded_by_newline: self.prev_token_was_newline
+            preceded_by_newline: self.prev_token_was_newline,
         };
 
-        //self.position_col += 1;
+        // self.position_col += 1;
         self.advance();
         Some(tok)
     }
@@ -300,8 +297,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('/') => {
                 self.singleline_comment();
                 Ok(())
-            },
-            _ => unreachable!()
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -314,7 +311,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     self.eat_line_terminator();
                     break;
                 }
-                _ => self.advance()
+                _ => self.advance(),
             }
         }
     }
@@ -334,23 +331,23 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 Some('*') => {
                     prev_char_is_star = true;
                     self.advance();
-                },
+                }
                 Some('/') if prev_char_is_star => {
                     // end of comment
                     self.advance();
                     self.prev_token_was_newline = has_line_terminator;
                     return Ok(());
-                },
+                }
                 Some(c) if c.is_es_line_terminator() => {
                     has_line_terminator = true;
                     prev_char_is_star = false;
                     self.eat_line_terminator();
-                },
+                }
                 Some(_) => {
                     prev_char_is_star = false;
                     self.advance();
                 }
-                _ => return Err("unterminated block comment".to_string())
+                _ => return Err("unterminated block comment".to_string()),
             }
         }
     }
@@ -362,15 +359,15 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             span: Span {
                 start: Position {
                     col: self.position_col - len,
-                    line: self.position_line
+                    line: self.position_line,
                 },
                 stop: Position {
                     col: self.position_col,
-                    line: self.position_line
-                }
+                    line: self.position_line,
+                },
             },
             kind: kind,
-            preceded_by_newline: self.prev_token_was_newline
+            preceded_by_newline: self.prev_token_was_newline,
         }
     }
 
@@ -380,8 +377,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::DivEquals, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::Div, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::Div, 1),
         }
     }
 
@@ -390,17 +387,18 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         self.advance();
         let regex_body = match self.regex_body() {
             Ok(r) => r,
-            Err(e) => return self.illegal_token(e)
+            Err(e) => return self.illegal_token(e),
         };
 
         // the lexer is again pointed at a /
         self.advance();
         let regex_flags = match self.regex_flags() {
             Ok(r) => r,
-            Err(e) => return self.illegal_token(e)
+            Err(e) => return self.illegal_token(e),
         };
 
-        self.new_token_of_length(TokenKind::RegularExpressionLiteral(regex_body.clone(), regex_flags.clone()),
+        self.new_token_of_length(TokenKind::RegularExpressionLiteral(regex_body.clone(),
+                                                                     regex_flags.clone()),
                                  regex_body.len() as u32 + regex_flags.len() as u32 + 2)
     }
 
@@ -418,7 +416,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 Some('[') => try!(self.regex_char_class(&mut buffer)),
                 Some('/') => break,
                 Some(c) if !c.is_es_line_terminator() => buffer.push(c),
-                _ => return Err("unterminated regex literal".to_string())
+                _ => return Err("unterminated regex literal".to_string()),
             }
 
             self.advance();
@@ -434,8 +432,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 buffer.push('\\');
                 buffer.push(c);
                 Ok(())
-            },
-            _ => Err("invalid regex literal".to_string())
+            }
+            _ => Err("invalid regex literal".to_string()),
         }
     }
 
@@ -447,7 +445,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 Some(']') => break,
                 Some('\\') => try!(self.regex_backslash_sequence(buffer)),
                 Some(c) if !c.is_es_line_terminator() => buffer.push(c),
-                _ => return Err("unterminated regex literal".to_string())
+                _ => return Err("unterminated regex literal".to_string()),
             }
 
             self.advance();
@@ -462,7 +460,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         loop {
             match self.peek() {
                 Some(c) if c.is_es_identifier_part() => buffer.push(c),
-                _ => break
+                _ => break,
             }
 
             self.advance();
@@ -479,12 +477,12 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::PlusEqual, 2)
-            },
+            }
             Some('+') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::DoublePlus, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::Plus, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::Plus, 1),
         }
     }
 
@@ -495,12 +493,12 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::MinusEqual, 2)
-            },
+            }
             Some('-') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::DoubleMinus, 2)
             }
-            _ => self.new_token_of_length(TokenKind::Minus, 1)
+            _ => self.new_token_of_length(TokenKind::Minus, 1),
         }
     }
 
@@ -510,8 +508,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::StarEqual, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::Star, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::Star, 1),
         }
     }
     fn right_cmp_or_shift(&mut self) -> Token {
@@ -523,7 +521,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 // only one possibility: <=.
                 self.advance();
                 self.new_token_of_length(TokenKind::LessThanEqual, 2)
-            },
+            }
             Some('<') => {
                 // can be either << or <<=.
                 self.advance();
@@ -531,11 +529,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     Some('=') => {
                         self.advance();
                         self.new_token_of_length(TokenKind::LeftShiftEqual, 3)
-                    },
-                    _ => self.new_token_of_length(TokenKind::LeftShift, 2)
+                    }
+                    _ => self.new_token_of_length(TokenKind::LeftShift, 2),
                 }
-            },
-            _ => self.new_token_of_length(TokenKind::LessThan, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::LessThan, 1),
         }
     }
 
@@ -547,7 +545,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::GreaterThanEqual, 2)
-            },
+            }
             Some('>') => {
                 self.advance();
                 match self.peek() {
@@ -557,18 +555,18 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                             Some('=') => {
                                 self.advance();
                                 self.new_token_of_length(TokenKind::TripleRightShiftEqual, 4)
-                            },
-                            _ => self.new_token_of_length(TokenKind::TripleRightShift, 3)
+                            }
+                            _ => self.new_token_of_length(TokenKind::TripleRightShift, 3),
                         }
-                    },
+                    }
                     Some('=') => {
                         self.advance();
                         self.new_token_of_length(TokenKind::RightShiftEqual, 3)
-                    },
-                    _ => self.new_token_of_length(TokenKind::RightShift, 2)
+                    }
+                    _ => self.new_token_of_length(TokenKind::RightShift, 2),
                 }
-            },
-            _ => self.new_token_of_length(TokenKind::GreaterThan, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::GreaterThan, 1),
         }
     }
 
@@ -583,11 +581,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     Some('=') => {
                         self.advance();
                         self.new_token_of_length(TokenKind::TripleEqual, 3)
-                    },
-                    _ => self.new_token_of_length(TokenKind::DoubleEqual, 2)
+                    }
+                    _ => self.new_token_of_length(TokenKind::DoubleEqual, 2),
                 }
-            },
-            _ => self.new_token_of_length(TokenKind::Equal, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::Equal, 1),
         }
     }
 
@@ -602,11 +600,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     Some('=') => {
                         self.advance();
                         self.new_token_of_length(TokenKind::TripleNotEqual, 3)
-                    },
-                    _ => self.new_token_of_length(TokenKind::DoubleNotEqual, 2)
+                    }
+                    _ => self.new_token_of_length(TokenKind::DoubleNotEqual, 2),
                 }
-            },
-            _ => self.new_token_of_length(TokenKind::LogicalNot, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::LogicalNot, 1),
         }
     }
 
@@ -618,12 +616,12 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('&') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::LogicalAnd, 2)
-            },
+            }
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::BitwiseAndEqual, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::BitwiseAnd, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::BitwiseAnd, 1),
         }
     }
 
@@ -635,12 +633,12 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('|') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::LogicalOr, 2)
-            },
+            }
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::BitwiseOrEqual, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::BitwiseOr, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::BitwiseOr, 1),
         }
     }
 
@@ -652,8 +650,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::BitwiseXorEqual, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::BitwiseXor, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::BitwiseXor, 1),
         }
     }
 
@@ -665,8 +663,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('=') => {
                 self.advance();
                 self.new_token_of_length(TokenKind::PercentEqual, 2)
-            },
-            _ => self.new_token_of_length(TokenKind::Percent, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::Percent, 1),
         }
     }
 
@@ -679,8 +677,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
 
         // XXX: identifier unicode literals
         let first_char = match self.peek().unwrap() {
-            '\\' => return self.illegal_token("identifier unicode literals are not implemented".to_string()),
-            c => c
+            '\\' => {
+                return self.illegal_token("identifier unicode literals are not implemented"
+                                              .to_string())
+            }
+            c => c,
         };
 
         self.advance();
@@ -691,16 +692,15 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         loop {
             match self.peek() {
                 Some(c) if c.is_es_identifier_part() => buffer.push(c),
-                _ => break
+                _ => break,
             }
 
             self.advance();
         }
 
-        let kind = RESERVED_WORDS
-            .get(&*buffer)
-            .cloned()
-            .unwrap_or(TokenKind::Identifier(buffer.clone()));
+        let kind = RESERVED_WORDS.get(&*buffer)
+                                 .cloned()
+                                 .unwrap_or(TokenKind::Identifier(buffer.clone()));
 
         self.new_token_of_length(kind, buffer.len() as u32)
     }
@@ -728,8 +728,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 Some(c) if c.is_es_line_terminator() => {
                     self.prev_token_was_newline = true;
                     self.eat_line_terminator();
-                },
-                _ => break
+                }
+                _ => break,
             }
         }
     }
@@ -742,8 +742,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some(c) if c.is_digit(10) => {
                 self.unadvance('.');
                 self.decimal_literal(false)
-            },
-            _ => self.new_token_of_length(TokenKind::Dot, 1)
+            }
+            _ => self.new_token_of_length(TokenKind::Dot, 1),
         }
     }
 
@@ -762,11 +762,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     Some('x') | Some('X') => self.hex_literal(),
                     Some('.') => self.decimal_literal(true),
                     Some(_) => self.octal_literal(),
-                    None => self.new_token_of_length(TokenKind::DecimalLiteral("0".to_string()), 1)
+                    None => self.new_token_of_length(TokenKind::DecimalLiteral("0".to_string()), 1),
                 }
-            },
+            }
             Some(_) => self.decimal_literal(false),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -783,14 +783,15 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 Some(c) if c.is_digit(16) => buffer.push(c),
                 Some(c) if c.is_es_identifier_start() => {
                     return self.illegal_token("invalid hex literal".to_string())
-                },
-                _ => break
+                }
+                _ => break,
             }
 
             self.advance();
         }
 
-        self.new_token_of_length(TokenKind::HexIntegerLiteral(buffer.clone()), buffer.len() as u32)
+        self.new_token_of_length(TokenKind::HexIntegerLiteral(buffer.clone()),
+                                 buffer.len() as u32)
     }
 
     fn decimal_literal(&mut self, leading_zero: bool) -> Token {
@@ -809,10 +810,10 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 Some('.') if !has_seen_dot => {
                     buffer.push('.');
                     has_seen_dot = true;
-                },
+                }
                 Some('.') if has_seen_dot => {
                     return self.illegal_token("invalid decimal literal".to_string());
-                },
+                }
                 Some(c) if c.is_digit(10) => buffer.push(c),
                 Some(c) if c.is_es_identifier_start() => {
                     // special case - e and E start an exponent.
@@ -822,7 +823,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
 
                     return self.illegal_token("invalid decimal literal".to_string());
                 }
-                _ => break
+                _ => break,
             }
 
             self.advance();
@@ -845,7 +846,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                     Some('-') => {
                         buffer.push('-');
                         self.advance();
-                    },
+                    }
                     _ => {}
                 }
 
@@ -856,20 +857,21 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                         Some(c) if c.is_digit(10) => buffer.push(c),
                         Some(c) if c.is_es_identifier_start() => {
                             return self.illegal_token("invalid decimal literal".to_string());
-                        },
+                        }
                         _ if previous_len == buffer.len() => {
                             return self.illegal_token("invalid decimal literal".to_string());
-                        },
-                        _ => break
+                        }
+                        _ => break,
                     }
 
                     self.advance();
                 }
-            },
+            }
             _ => {}
         }
 
-        self.new_token_of_length(TokenKind::DecimalLiteral(buffer.clone()), buffer.len() as u32)
+        self.new_token_of_length(TokenKind::DecimalLiteral(buffer.clone()),
+                                 buffer.len() as u32)
     }
 
     fn octal_literal(&mut self) -> Token {
@@ -893,8 +895,8 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 }
                 Some(c) if c.is_es_identifier_start() => {
                     return self.illegal_token("invalid octal literal".to_string());
-                },
-                _ => break
+                }
+                _ => break,
             }
 
             self.advance();
@@ -906,9 +908,11 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         }
 
         if still_in_octal_mode {
-            self.new_token_of_length(TokenKind::OctalIntegerLiteral(buffer.clone()), buffer.len() as u32)
+            self.new_token_of_length(TokenKind::OctalIntegerLiteral(buffer.clone()),
+                                     buffer.len() as u32)
         } else {
-            self.new_token_of_length(TokenKind::DecimalLiteral(buffer.clone()), buffer.len() as u32)
+            self.new_token_of_length(TokenKind::DecimalLiteral(buffer.clone()),
+                                     buffer.len() as u32)
         }
     }
 
@@ -920,32 +924,33 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             match self.peek() {
                 Some('"') if started_with_dbl_quote => break,
                 Some('\'') if !started_with_dbl_quote => break,
-                Some('\\') => if let Err(e) = self.string_literal_escape_sequence(&mut buffer) {
-                    return self.illegal_token(e);
-                },
+                Some('\\') => {
+                    if let Err(e) = self.string_literal_escape_sequence(&mut buffer) {
+                        return self.illegal_token(e);
+                    }
+                }
                 Some(c) => {
                     self.advance();
                     buffer.push(c)
-                },
-                _ => return self.illegal_token("unterminated string literal".to_string())
+                }
+                _ => return self.illegal_token("unterminated string literal".to_string()),
             }
         }
 
         // we are looking at a " or ' again, whatever is appropriate.
         self.advance();
-        self.new_token_of_length(TokenKind::StringLiteral(buffer.clone()), buffer.len() as u32 + 2)
+        self.new_token_of_length(TokenKind::StringLiteral(buffer.clone()),
+                                 buffer.len() as u32 + 2)
     }
 
-    fn string_literal_escape_sequence(&mut self,
-                                      buffer: &mut String)
-                                      -> Result<(), String> {
+    fn string_literal_escape_sequence(&mut self, buffer: &mut String) -> Result<(), String> {
         // we're looking at a \.
         self.advance();
         match self.peek() {
             Some('\'') => {
                 self.advance();
                 buffer.push('\'');
-            },
+            }
             Some('"') => {
                 self.advance();
                 buffer.push('"');
@@ -953,27 +958,27 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some('\\') => {
                 self.advance();
                 buffer.push('\\');
-            },
+            }
             Some('b') => {
                 self.advance();
                 buffer.push('\u{0008}');
-            },
+            }
             Some('t') => {
                 self.advance();
                 buffer.push('\u{0009}');
-            },
+            }
             Some('n') => {
                 self.advance();
                 buffer.push('\n');
-            },
+            }
             Some('v') => {
                 self.advance();
                 buffer.push('\u{000B}');
-            },
+            }
             Some('f') => {
                 self.advance();
                 buffer.push('\u{000C}');
-            },
+            }
             Some('r') => {
                 self.advance();
                 buffer.push('\u{000D}');
@@ -989,16 +994,16 @@ impl<I: Iterator<Item=char>> Lexer<I> {
                 // TODO: i'm leaving this undefined for now.
                 self.advance();
                 buffer.push('\0');
-            },
+            }
             Some(c) if c.is_es_line_terminator() => {
                 self.eat_line_terminator();
                 buffer.push(c);
-            },
+            }
             Some(c) => {
                 self.advance();
                 buffer.push(c);
             }
-            _ => return Err("unterminated string literal".to_string())
+            _ => return Err("unterminated string literal".to_string()),
         }
 
         Ok(())
@@ -1011,7 +1016,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         for _ in 0..2 {
             match self.peek() {
                 Some(c) if c.is_digit(16) => buf.push(c),
-                _ => return Err("invalid escape sequence".to_owned())
+                _ => return Err("invalid escape sequence".to_owned()),
             }
 
             self.advance();
@@ -1039,7 +1044,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         for _ in 0..4 {
             match self.peek() {
                 Some(c) if c.is_digit(16) => buf.push(c),
-                _ => return Err("invalid escape sequence".to_owned())
+                _ => return Err("invalid escape sequence".to_owned()),
             }
 
             self.advance();
@@ -1048,11 +1053,9 @@ impl<I: Iterator<Item=char>> Lexer<I> {
         // again, should be obvious...
         debug_assert!(buf.len() == 4);
         // quick 4-digit hex to decimal conversion
-        let value =
-              (4096 * buf[0].to_digit(16).unwrap())
-            + (256  * buf[1].to_digit(16).unwrap())
-            + (16   * buf[2].to_digit(16).unwrap())
-            + (       buf[3].to_digit(16).unwrap());
+        let value = (4096 * buf[0].to_digit(16).unwrap()) + (256 * buf[1].to_digit(16).unwrap()) +
+                    (16 * buf[2].to_digit(16).unwrap()) +
+                    (buf[3].to_digit(16).unwrap());
 
         let actual_char = if let Some(v) = char::from_u32(value) {
             v
@@ -1138,7 +1141,7 @@ impl<I: Iterator<Item=char>> Lexer<I> {
             Some(c) if c.is_es_identifier_start() => Some(self.identifier()),
             Some(c) if c.is_digit(10) => Some(self.numeric_literal()),
             Some(c) => Some(self.illegal_token(format!("unexpected char: {}", c))),
-            None => None
+            None => None,
         }
     }
 
@@ -1164,14 +1167,18 @@ mod tests {
         };
 
         match found_token {
-            Some(Token { kind, span, .. } ) => {
+            Some(Token { kind, span, .. }) => {
                 assert_eq!(kind, token);
                 assert_eq!(span.start.col, 0);
                 assert_eq!(span.start.line, 1);
                 assert_eq!(span.stop.col, (string.len() as u32));
                 assert_eq!(span.stop.line, 1);
             }
-            _ => panic!("unexpected token value: {:?}, expected: {:?}", found_token, token)
+            _ => {
+                panic!("unexpected token value: {:?}, expected: {:?}",
+                       found_token,
+                       token)
+            }
         }
     }
 
@@ -1307,8 +1314,7 @@ mod tests {
         assert_eq!(TokenKind::Identifier("a".to_string()),
                    lexer.next_token().unwrap().kind);
         let tok = lexer.next_token().unwrap();
-        assert_eq!(TokenKind::Identifier("b".to_string()),
-                   tok.kind);
+        assert_eq!(TokenKind::Identifier("b".to_string()), tok.kind);
         assert!(tok.preceded_by_newline);
 
     }
@@ -1337,8 +1343,7 @@ mod tests {
         assert_eq!(TokenKind::Identifier("before".to_string()),
                    lexer.next_token().unwrap().kind);
         let tok = lexer.next_token().unwrap();
-        assert_eq!(TokenKind::Identifier("after".to_string()),
-                   tok.kind);
+        assert_eq!(TokenKind::Identifier("after".to_string()), tok.kind);
         assert!(tok.preceded_by_newline);
     }
 

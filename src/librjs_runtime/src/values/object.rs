@@ -14,7 +14,7 @@ use std::default::Default;
 
 #[derive(PartialEq)]
 pub enum Object {
-    Standard
+    Standard,
 }
 
 impl Default for Object {
@@ -39,10 +39,18 @@ pub trait HostObject : Trace {
     fn get(&self, ee: &mut ExecutionEngine, property_name: &str) -> EvalValue;
     fn get_own_property(&self, property_name: &str) -> Option<Property>;
     fn get_property(&self) -> Option<Property>;
-    fn put(&mut self, ee: &mut ExecutionEngine, property_name: &str, value: &RootedValue, should_throw: bool);
+    fn put(&mut self,
+           ee: &mut ExecutionEngine,
+           property_name: &str,
+           value: &RootedValue,
+           should_throw: bool);
     fn can_put(&self, property_name: &str) -> bool;
     fn has_property(&self, property_name: &str) -> bool;
     fn delete(&mut self, property_name: &str, should_throw: bool) -> bool;
     fn default_value(&self, hint: &str) -> RootedValue;
-    fn define_own_property(&mut self, property_name: &str, property: Property, should_throw: bool) -> bool;
+    fn define_own_property(&mut self,
+                           property_name: &str,
+                           property: Property,
+                           should_throw: bool)
+                           -> bool;
 }

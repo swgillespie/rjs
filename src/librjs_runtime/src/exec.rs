@@ -5,7 +5,7 @@ use heap::Heap;
 use values::{RootedValue, EvalValue};
 
 pub struct ExecutionEngine {
-    heap: Heap
+    heap: Heap,
 }
 
 impl ExecutionEngine {

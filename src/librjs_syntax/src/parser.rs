@@ -54,16 +54,16 @@ macro_rules! match_peek {
     }
 }
 
-pub struct Parser<I: Iterator<Item=char>> {
+pub struct Parser<I: Iterator<Item = char>> {
     lexer: Lexer<I>,
     strict_mode: bool,
     peek_stack: Vec<Token>,
     in_directive_prologue: bool,
     last_span: Span,
-    in_disallowed: bool
+    in_disallowed: bool,
 }
 
-impl<I: Iterator<Item=char>> Parser<I> {
+impl<I: Iterator<Item = char>> Parser<I> {
     pub fn new(lexer: Lexer<I>) -> Parser<I> {
         Parser {
             lexer: lexer,
@@ -71,7 +71,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             peek_stack: vec![],
             in_directive_prologue: false,
             last_span: Default::default(),
-            in_disallowed: false
+            in_disallowed: false,
         }
     }
 
@@ -119,7 +119,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
         Ok(Program {
             directive_prologue: prolog,
-            statements: statements
+            statements: statements,
         })
     }
 
@@ -131,11 +131,14 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn next_token(&mut self, leading_div: bool) -> Option<Token> {
-        self.peek_stack.pop()
-            .or_else(|| if leading_div {
-                self.lexer.next_token_leading_div()
-            } else {
-                self.lexer.next_token()
+        self.peek_stack
+            .pop()
+            .or_else(|| {
+                if leading_div {
+                    self.lexer.next_token_leading_div()
+                } else {
+                    self.lexer.next_token()
+                }
             })
     }
 
@@ -153,7 +156,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
             match token {
                 Some(t) => self.peek_stack.push(t),
-                None => return None
+                None => return None,
             }
         }
 
@@ -166,12 +169,14 @@ impl<I: Iterator<Item=char>> Parser<I> {
             match self.next_token(false) {
                 Some(Token { kind: TokenKind::Semicolon, span, .. }) => {
                     self.last_span = span;
-                    return Ok(span)
-                },
+                    return Ok(span);
+                }
                 Some(Token { kind: ref other_kind, span, ..}) if inserted_semicolon_already => {
-                    span_err!(span, "unexpected token: \
-                                     expected `{:?}`, got `{:?}`", TokenKind::Semicolon, other_kind)
-                },
+                    span_err!(span,
+                              "unexpected token: expected `{:?}`, got `{:?}`",
+                              TokenKind::Semicolon,
+                              other_kind)
+                }
                 Some(token) => {
                     // first time around, try to stick a semicolon in there.
                     // if it's legal to do so, this will stick a semicolon onto
@@ -186,7 +191,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                     self.insert_token(token.clone());
                     self.try_insert_semicolon(&token);
                     inserted_semicolon_already = true;
-                },
+                }
                 _ => {
                     self.insert_semicolon();
                     inserted_semicolon_already = true;
@@ -199,13 +204,15 @@ impl<I: Iterator<Item=char>> Parser<I> {
         match self.next_token(leading_div) {
             Some(Token { kind: ref other_kind, span, ..}) if other_kind == &kind => {
                 self.last_span = span;
-                return Ok(span)
+                return Ok(span);
             }
             Some(Token { kind: ref other_kind, span, ..}) => {
-                span_err!(span, "unexpected token: \
-                                 expected `{:?}`, got `{:?}`", kind, other_kind)
-            },
-            _ => span_unexpected_eof!()
+                span_err!(span,
+                          "unexpected token: expected `{:?}`, got `{:?}`",
+                          kind,
+                          other_kind)
+            }
+            _ => span_unexpected_eof!(),
         }
     }
 
@@ -215,29 +222,31 @@ impl<I: Iterator<Item=char>> Parser<I> {
                 self.last_span = span;
                 Ok(Spanned {
                     span: span,
-                    data: name.clone()
+                    data: name.clone(),
                 })
-            },
+            }
             // some words are reserved only in strict mode and can otherwise be used as identifiers
-            Some(Token { kind: TokenKind::FutureReservedWordStrict(ref name), span, .. }) if !self.strict_mode => {
+            Some(Token { kind: TokenKind::FutureReservedWordStrict(ref name), span, .. })
+                if !self.strict_mode => {
                 self.last_span = span;
                 Ok(Spanned {
                     span: span,
-                    data: name.to_string()
+                    data: name.to_string(),
                 })
-            },
+            }
             Some(Token { kind: ref other_kind, span, ..}) => {
-                span_err!(span, "unexpected token: \
-                                 expected an identifier, got `{:?}`", other_kind)
-            },
-            _ => span_unexpected_eof!()
+                span_err!(span,
+                          "unexpected token: expected an identifier, got `{:?}`",
+                          other_kind)
+            }
+            _ => span_unexpected_eof!(),
         }
     }
 
     fn next_token_preceded_by_newline(&mut self) -> bool {
         match self.peek(false) {
             Some(tok) => tok.preceded_by_newline,
-            _ => false
+            _ => false,
         }
     }
 
@@ -257,7 +266,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         self.insert_token(Token {
             span: last_span,
             kind: TokenKind::Semicolon,
-            preceded_by_newline: true
+            preceded_by_newline: true,
         });
     }
 
@@ -322,7 +331,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         }
 
         let Span { stop, .. } = try!(self.eat_semicolon());
-        Ok(Spanned::new(Span::new(start, stop), Statement::Declaration(Declaration::Variable(declarations))))
+        Ok(Spanned::new(Span::new(start, stop),
+                        Statement::Declaration(Declaration::Variable(declarations))))
     }
 
     fn variable_declaration(&mut self) -> ParseResult<VariableDeclarator> {
@@ -336,7 +346,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
         Ok(VariableDeclarator {
             id: Spanned::new(ident.span, Pattern::Identifier(ident)),
-            initial_value: initialiser
+            initial_value: initialiser,
         })
     }
 
@@ -358,11 +368,11 @@ impl<I: Iterator<Item=char>> Parser<I> {
             None
         };
 
-        let stop = false_stmt
-            .as_ref()
-            .map(|x| x.span.stop)
-            .unwrap_or(true_stmt.span.stop);
-        Ok(Spanned::new(Span::new(start, stop), Statement::If(cond, Box::new(true_stmt), false_stmt)))
+        let stop = false_stmt.as_ref()
+                             .map(|x| x.span.stop)
+                             .unwrap_or(true_stmt.span.stop);
+        Ok(Spanned::new(Span::new(start, stop),
+                        Statement::If(cond, Box::new(true_stmt), false_stmt)))
     }
 
     fn do_while_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -374,7 +384,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let _ = try!(self.eat_token(TokenKind::RightParen, false));
         let Span { stop, .. } = try!(self.eat_semicolon());
 
-        Ok(Spanned::new(Span::new(start, stop), Statement::DoWhile(expr, Box::new(stmt))))
+        Ok(Spanned::new(Span::new(start, stop),
+                        Statement::DoWhile(expr, Box::new(stmt))))
     }
 
     fn while_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -384,7 +395,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let _ = try!(self.eat_token(TokenKind::RightParen, false));
         let stmt = try!(self.statement());
 
-        Ok(Spanned::new(Span::new(start, stmt.span.stop), Statement::While(expr, Box::new(stmt))))
+        Ok(Spanned::new(Span::new(start, stmt.span.stop),
+                        Statement::While(expr, Box::new(stmt))))
     }
 
     fn for_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -409,11 +421,13 @@ impl<I: Iterator<Item=char>> Parser<I> {
             self.in_disallowed = false;
 
             let dec_end = match declarations.last() {
-                Some(ref vardec) => match vardec.initial_value {
-                    Some(ref s) => s.span.stop,
-                    _ => vardec.id.span.stop
-                },
-                _ => unreachable!()
+                Some(ref vardec) => {
+                    match vardec.initial_value {
+                        Some(ref s) => s.span.stop,
+                        _ => vardec.id.span.stop,
+                    }
+                }
+                _ => unreachable!(),
             };
 
             let dec_span = Span::new(dec_start, dec_end);
@@ -497,11 +511,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let _ = try!(self.eat_token(TokenKind::RightParen, false));
             let stmt = try!(self.statement());
             let span = Span::new(start, stmt.span.stop);
-            let for_stmt = Statement::For(
-                None,
-                condition,
-                action,
-                Box::new(stmt));
+            let for_stmt = Statement::For(None, condition, action, Box::new(stmt));
             return Ok(Spanned::new(span, for_stmt));
         }
 
@@ -519,10 +529,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let _ = try!(self.eat_token(TokenKind::RightParen, false));
             let stmt = try!(self.statement());
             let span = Span::new(start, stmt.span.stop);
-            let for_stmt = Statement::ForIn(
-                ForInit::Expr(expr),
-                in_expr,
-                Box::new(stmt));
+            let for_stmt = Statement::ForIn(ForInit::Expr(expr), in_expr, Box::new(stmt));
             return Ok(Spanned::new(span, for_stmt));
         }
 
@@ -544,11 +551,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let _ = try!(self.eat_token(TokenKind::RightParen, false));
         let stmt = try!(self.statement());
         let span = Span::new(start, stmt.span.stop);
-        let for_stmt = Statement::For(
-            Some(ForInit::Expr(expr)),
-            condition,
-            action,
-            Box::new(stmt));
+        let for_stmt = Statement::For(Some(ForInit::Expr(expr)), condition, action, Box::new(stmt));
         return Ok(Spanned::new(span, for_stmt));
     }
 
@@ -568,7 +571,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let identifier = if next_token_is!(self, false, TokenKind::Identifier(_)) {
             // this is a restricted production. if the next token is a newline,
             // we have to insert a semicolon and end this statement.
-            if self.next_token_preceded_by_newline() || next_token_is!(self, true, TokenKind::RightBrace) {
+            if self.next_token_preceded_by_newline() ||
+               next_token_is!(self, true, TokenKind::RightBrace) {
                 self.insert_semicolon();
                 None
             } else {
@@ -585,7 +589,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
     fn break_statement(&mut self) -> ParseResult<SpannedStatement> {
         let Span { start, .. } = try!(self.eat_token(TokenKind::Break, true));
         let identifier = if next_token_is!(self, false, TokenKind::Identifier(_)) {
-            if self.next_token_preceded_by_newline() || next_token_is!(self, true, TokenKind::RightBrace) {
+            if self.next_token_preceded_by_newline() ||
+               next_token_is!(self, true, TokenKind::RightBrace) {
                 self.insert_semicolon();
                 None
             } else {
@@ -604,7 +609,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let expr = if !next_token_is!(self, true, TokenKind::Semicolon) {
             // if our next token is not a semicolon, we have to try to ascertain
             // what it is.
-            if self.next_token_preceded_by_newline() || next_token_is!(self, true, TokenKind::RightBrace) {
+            if self.next_token_preceded_by_newline() ||
+               next_token_is!(self, true, TokenKind::RightBrace) {
                 self.insert_semicolon();
                 None
             } else {
@@ -626,10 +632,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let stmt = try!(self.statement());
 
         if self.strict_mode {
-            span_err!(Span::new(start, stmt.span.stop), "`with` statements are not permitted in strict mode")
+            span_err!(Span::new(start, stmt.span.stop),
+                      "`with` statements are not permitted in strict mode")
         }
 
-        Ok(Spanned::new(Span::new(start, stmt.span.stop), Statement::With(expr, Box::new(stmt))))
+        Ok(Spanned::new(Span::new(start, stmt.span.stop),
+                        Statement::With(expr, Box::new(stmt))))
     }
 
     fn switch_statement(&mut self) -> ParseResult<SpannedStatement> {
@@ -673,7 +681,11 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // in which case we've reached the end of the switch statement.
         let mut statements = vec![];
         loop {
-            if next_token_is!(self, false, TokenKind::Default, TokenKind::Case, TokenKind::RightBrace) {
+            if next_token_is!(self,
+                              false,
+                              TokenKind::Default,
+                              TokenKind::Case,
+                              TokenKind::RightBrace) {
                 break;
             }
 
@@ -682,7 +694,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
         Ok(SwitchCase {
             test: test,
-            body: statements
+            body: statements,
         })
     }
 
@@ -717,7 +729,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                     // statement prodouction, what we see now can /always/
                     // be parsed as an expression statement with an inserted
                     // semicolon.
-                    preceded_by_newline: false
+                    preceded_by_newline: false,
                 });
                 return self.expression_statement();
             }
@@ -779,9 +791,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
         Ok(CatchClause {
             param: SpannedPattern {
                 span: ident.span,
-                data: Pattern::Identifier(ident)
+                data: Pattern::Identifier(ident),
             },
-            body: Box::new(block)
+            body: Box::new(block),
         })
     }
 
@@ -814,7 +826,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             name: Some(ident),
             parameters: params,
             prologue: prolog,
-            body: body
+            body: body,
         };
 
         Ok(Spanned::new(Span::new(start, stop),
@@ -879,11 +891,13 @@ impl<I: Iterator<Item=char>> Parser<I> {
     fn expression_statement(&mut self) -> ParseResult<SpannedStatement> {
         let expr = try!(self.expression());
         let Span { stop, ..} = try!(self.eat_semicolon());
-        if self.in_directive_prologue && expr.data == Expression::Literal(Literal::String("use strict".to_string())) {
+        if self.in_directive_prologue &&
+           expr.data == Expression::Literal(Literal::String("use strict".to_string())) {
             self.strict_mode = true;
         }
 
-        Ok(Spanned::new(Span::new(expr.span.start, stop), Statement::Expression(expr)))
+        Ok(Spanned::new(Span::new(expr.span.start, stop),
+                        Statement::Expression(expr)))
     }
 
     // Expressions!
@@ -913,14 +927,18 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // identifier is part of a member statement (i.e. this.continue())
         let token = match self.next_token(false) {
             Some(tok) => tok,
-            None => span_unexpected_eof!()
+            None => span_unexpected_eof!(),
         };
 
         self.last_span = token.span;
 
         let as_identifier = match token.as_identifier() {
             Some(Token { kind: TokenKind::Identifier(ref data) , .. }) => data.clone(),
-            _ => span_err!(token.span, "unexpected token: expected an identifier, got {:?}", token.kind)
+            _ => {
+                span_err!(token.span,
+                          "unexpected token: expected an identifier, got {:?}",
+                          token.kind)
+            }
         };
 
         let ident = Spanned::new(token.span, as_identifier);
@@ -978,12 +996,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn decimal_mathmatical_value(&mut self, s: &str) -> f64 {
-        let dot_split : Vec<_> = s.split('.').collect();
+        let dot_split: Vec<_> = s.split('.').collect();
         if dot_split.len() == 1 {
             // there was no dot at all. In this case this is
             // just an integer, possibly with an exponent
-            let exponent_split : Vec<_> = s.split(|f| f == 'e' || f == 'E')
-                .collect();
+            let exponent_split: Vec<_> = s.split(|f| f == 'e' || f == 'E')
+                                          .collect();
             if exponent_split.len() == 1 {
                 return self.decimal_integer_mathematical_value(s) as f64;
             }
@@ -992,12 +1010,14 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let exponent = exponent_split[1];
             let mv = self.decimal_integer_mathematical_value(base);
             let exp_mv = self.decimal_integer_mathematical_value(exponent);
-            let exp_value : i32 = match FromPrimitive::from_i64(exp_mv) {
+            let exp_value: i32 = match FromPrimitive::from_i64(exp_mv) {
                 Some(value) => value,
-                None => if exp_mv.is_positive() {
-                    return f64::INFINITY
-                } else {
-                    return 0f64
+                None => {
+                    if exp_mv.is_positive() {
+                        return f64::INFINITY;
+                    } else {
+                        return 0f64;
+                    }
                 }
             };
 
@@ -1016,9 +1036,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         }
 
         if before_dot.is_empty() {
-            let exponent_split : Vec<_> = after_dot
-                .split(|f| f == 'e' || f == 'E')
-                .collect();
+            let exponent_split: Vec<_> = after_dot.split(|f| f == 'e' || f == 'E')
+                                                  .collect();
 
             // literals like ".10" become the MV
             // of the decimal digits.
@@ -1032,12 +1051,14 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let (mv, num_digits) = self.decimal_digits_mathematical_value(digits);
             let exp_mv = self.decimal_integer_mathematical_value(exponent);
 
-            let exp_value : i32 = match FromPrimitive::from_i64(exp_mv - num_digits as i64) {
+            let exp_value: i32 = match FromPrimitive::from_i64(exp_mv - num_digits as i64) {
                 Some(value) => value,
-                None => if exp_mv.is_positive() {
-                    return f64::INFINITY
-                } else {
-                    return 0f64
+                None => {
+                    if exp_mv.is_positive() {
+                        return f64::INFINITY;
+                    } else {
+                        return 0f64;
+                    }
                 }
             };
 
@@ -1048,9 +1069,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // our string has been partitioned like this so far:
         // 101949.23828e39
         // [----] [------]
-        let exponent_split : Vec<_> = after_dot
-            .split(|f| f == 'e' || f == 'E')
-            .collect();
+        let exponent_split: Vec<_> = after_dot.split(|f| f == 'e' || f == 'E')
+                                              .collect();
         if exponent_split.len() == 1 {
             // in this case, there's no exponent.
             let dmv = self.decimal_integer_mathematical_value(before_dot);
@@ -1068,12 +1088,14 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // MV of an exponent is too huge. For really huge exponents,
         // v8 reports Infinity and for very small ones it reports 0,
         // so I'll do the same.
-        let exp_value : i32 = match FromPrimitive::from_i64(exp_mv) {
+        let exp_value: i32 = match FromPrimitive::from_i64(exp_mv) {
             Some(value) => value,
-            None => if exp_mv.is_positive() {
-                return f64::INFINITY
-            } else {
-                return 0f64
+            None => {
+                if exp_mv.is_positive() {
+                    return f64::INFINITY;
+                } else {
+                    return 0f64;
+                }
             }
         };
 
@@ -1085,7 +1107,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // 101949.23828e39
         // [----] [---] []
         let (digit_mv, num_digits) = self.decimal_digits_mathematical_value(digits);
-        return (dmv as f64 + (digit_mv as f64 * 10f64.powi(-(num_digits as i32)))) * 10f64.powi(exp_value);
+        return (dmv as f64 + (digit_mv as f64 * 10f64.powi(-(num_digits as i32)))) *
+               10f64.powi(exp_value);
     }
 
     fn decimal_integer_mathematical_value(&mut self, s: &str) -> i64 {
@@ -1093,16 +1116,20 @@ impl<I: Iterator<Item=char>> Parser<I> {
         if s.chars().next().unwrap() == '+' {
             // from_str_radix does not like a leading plus. The number is going
             // to be positive anyway, so get rid of it.
-            i64::from_str_radix(&s[1..], 10).expect("string can't be parsed as an i64 but made it this far?")
+            i64::from_str_radix(&s[1..], 10)
+                .expect("string can't be parsed as an i64 but made it this far?")
         } else {
-            i64::from_str_radix(s, 10).expect("string can't be parsed as an i64 but made it this far?")
+            i64::from_str_radix(s, 10)
+                .expect("string can't be parsed as an i64 but made it this far?")
         }
     }
 
     fn decimal_digits_mathematical_value(&mut self, s: &str) -> (i64, usize) {
         // this is also pretty straightforward int parsing, except
         // we have to keep track of how long the original string was.
-        (i64::from_str_radix(s, 10).expect("string can't be parsed as an i64 but made it this far?"), s.len())
+        (i64::from_str_radix(s, 10)
+             .expect("string can't be parsed as an i64 but made it this far?"),
+         s.len())
     }
 
     fn hex_integer_literal(&mut self) -> ParseResult<SpannedExpression> {
@@ -1217,15 +1244,19 @@ impl<I: Iterator<Item=char>> Parser<I> {
         // ugly hack this sucks: rust's mutability checking
         // can not handle what we'd like to do here...
         let property_kind = match self.peek(false) {
-            Some(&Token { kind: TokenKind::Identifier(ref p), .. }) if p == "get" => PropertyKind::Get,
-            Some(&Token { kind: TokenKind::Identifier(ref p), .. }) if p == "set" => PropertyKind::Set,
-            _ => PropertyKind::Init
+            Some(&Token { kind: TokenKind::Identifier(ref p), .. }) if p == "get" => {
+                PropertyKind::Get
+            }
+            Some(&Token { kind: TokenKind::Identifier(ref p), .. }) if p == "set" => {
+                PropertyKind::Set
+            }
+            _ => PropertyKind::Init,
         };
 
         match property_kind {
             PropertyKind::Get => return self.property_get(),
             PropertyKind::Set => return self.property_set(),
-            PropertyKind::Init => return self.property_init()
+            PropertyKind::Init => return self.property_init(),
         }
     }
 
@@ -1237,7 +1268,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         Ok(Property {
             key: name,
             value: Box::new(expr),
-            kind: PropertyKind::Init
+            kind: PropertyKind::Init,
         })
     }
 
@@ -1251,7 +1282,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             self.insert_token(Token {
                 span: ident.span,
                 kind: TokenKind::Identifier(ident.data),
-                preceded_by_newline: false
+                preceded_by_newline: false,
             });
 
             return self.property_init();
@@ -1267,12 +1298,12 @@ impl<I: Iterator<Item=char>> Parser<I> {
             name: None,
             parameters: vec![],
             prologue: prolog,
-            body: body
+            body: body,
         }));
         Ok(Property {
             key: name,
             value: Box::new(Spanned::new(Span::new(start, stop), expr)),
-            kind: PropertyKind::Get
+            kind: PropertyKind::Get,
         })
     }
 
@@ -1285,7 +1316,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
             self.insert_token(Token {
                 span: ident.span,
                 kind: TokenKind::Identifier(ident.data),
-                preceded_by_newline: false
+                preceded_by_newline: false,
             });
 
             return self.property_init();
@@ -1302,25 +1333,25 @@ impl<I: Iterator<Item=char>> Parser<I> {
             name: None,
             parameters: vec![Spanned::new(param.span, Pattern::Identifier(param))],
             prologue: prolog,
-            body: body
+            body: body,
         }));
         Ok(Property {
             key: name,
             value: Box::new(Spanned::new(Span::new(start, stop), expr)),
-            kind: PropertyKind::Set
+            kind: PropertyKind::Set,
         })
     }
 
     fn property_name(&mut self) -> ParseResult<LiteralOrIdentifier> {
         if next_token_is!(self, false, TokenKind::Identifier(_)) {
             let ident = try!(self.identifier());
-            return Ok(LiteralOrIdentifier::Identifier(ident))
+            return Ok(LiteralOrIdentifier::Identifier(ident));
         }
 
         if next_token_is!(self, false, TokenKind::StringLiteral(_)) {
             let Token { span, kind, .. } = self.next_token(false).unwrap();
             if let TokenKind::StringLiteral(s) = kind {
-                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::String(s))))
+                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::String(s))));
             } else {
                 unreachable!()
             }
@@ -1330,7 +1361,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let Token { span, kind, .. } = self.next_token(false).unwrap();
             if let TokenKind::DecimalLiteral(s) = kind {
                 let value = self.decimal_mathmatical_value(&s);
-                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))))
+                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span,
+                                                                    Literal::Numeric(value))));
             } else {
                 unreachable!()
             }
@@ -1340,7 +1372,8 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let Token { span, kind, .. } = self.next_token(false).unwrap();
             if let TokenKind::HexIntegerLiteral(s) = kind {
                 let value = self.hex_mathematical_value(&s);
-                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))))
+                return Ok(LiteralOrIdentifier::Literal(Spanned::new(span,
+                                                                    Literal::Numeric(value))));
             } else {
                 unreachable!()
             }
@@ -1354,7 +1387,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
         let Token { span, kind, .. } = self.next_token(false).unwrap();
         if let TokenKind::OctalIntegerLiteral(s) = kind {
             let value = self.octal_mathematical_value(&s);
-            return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))))
+            return Ok(LiteralOrIdentifier::Literal(Spanned::new(span, Literal::Numeric(value))));
         } else {
             span_err!(span, "invalid name for property: {:#?}", kind);
         }
@@ -1384,7 +1417,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn assignment_expression(&mut self) -> ParseResult<SpannedExpression> {
         let lhs = try!(self.conditional_expression());
-        if next_token_is!(self, false, TokenKind::Equal,
+        if next_token_is!(self,
+                          false,
+                          TokenKind::Equal,
                           TokenKind::StarEqual,
                           TokenKind::DivEquals,
                           TokenKind::PercentEqual,
@@ -1428,7 +1463,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
         Ok(op)
     }
 
-    fn verify_assignment_lhs(&mut self, lhs: SpannedExpression) -> ParseResult<PatternOrExpression> {
+    fn verify_assignment_lhs(&mut self,
+                             lhs: SpannedExpression)
+                             -> ParseResult<PatternOrExpression> {
         // In order to avoid catastrophic lookahead when parsing the
         // AssignmentExpression production as given in the reference grammar,
         // we parse a strict superset of what's allowed in the left hand
@@ -1461,10 +1498,10 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
                 PatternOrExpression::Pattern(Spanned {
                     span: lhs.span,
-                    data    : Pattern::Identifier(data.clone())
+                    data: Pattern::Identifier(data.clone()),
                 })
-            },
-            _ => PatternOrExpression::Expr(Box::new(lhs))
+            }
+            _ => PatternOrExpression::Expr(Box::new(lhs)),
         };
 
         Ok(pat_or_exp)
@@ -1495,7 +1532,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let rhs = try!(self.logical_or_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
-                            Expression::Logical(LogicalOperator::Or, Box::new(expr), Box::new(rhs))))
+                            Expression::Logical(LogicalOperator::Or,
+                                                Box::new(expr),
+                                                Box::new(rhs))))
 
         } else {
             Ok(expr)
@@ -1509,7 +1548,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let rhs = try!(self.logical_and_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
-                            Expression::Logical(LogicalOperator::And, Box::new(expr), Box::new(rhs))))
+                            Expression::Logical(LogicalOperator::And,
+                                                Box::new(expr),
+                                                Box::new(rhs))))
         } else {
             Ok(expr)
         }
@@ -1522,7 +1563,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let rhs = try!(self.bitwise_or_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
-                            Expression::Binary(BinaryOperator::BitwiseOr, Box::new(expr), Box::new(rhs))))
+                            Expression::Binary(BinaryOperator::BitwiseOr,
+                                               Box::new(expr),
+                                               Box::new(rhs))))
         } else {
             Ok(expr)
         }
@@ -1535,7 +1578,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let rhs = try!(self.bitwise_xor_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
-                            Expression::Binary(BinaryOperator::BitwiseXor, Box::new(expr), Box::new(rhs))))
+                            Expression::Binary(BinaryOperator::BitwiseXor,
+                                               Box::new(expr),
+                                               Box::new(rhs))))
         } else {
             Ok(expr)
         }
@@ -1548,7 +1593,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let rhs = try!(self.bitwise_and_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
             Ok(Spanned::new(span,
-                            Expression::Binary(BinaryOperator::BitwiseAnd, Box::new(expr), Box::new(rhs))))
+                            Expression::Binary(BinaryOperator::BitwiseAnd,
+                                               Box::new(expr),
+                                               Box::new(rhs))))
         } else {
             Ok(expr)
         }
@@ -1556,7 +1603,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn equality_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.relational_expression());
-        if next_token_is!(self, true, TokenKind::DoubleEqual,
+        if next_token_is!(self,
+                          true,
+                          TokenKind::DoubleEqual,
                           TokenKind::DoubleNotEqual,
                           TokenKind::TripleEqual,
                           TokenKind::TripleNotEqual) {
@@ -1586,7 +1635,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn relational_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.shift_expression());
-        if next_token_is!(self, true, TokenKind::LessThan,
+        if next_token_is!(self,
+                          true,
+                          TokenKind::LessThan,
                           TokenKind::LessThanEqual,
                           TokenKind::GreaterThan,
                           TokenKind::GreaterThanEqual,
@@ -1624,7 +1675,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn shift_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.additive_expression());
-        if next_token_is!(self, true, TokenKind::LeftShift,
+        if next_token_is!(self,
+                          true,
+                          TokenKind::LeftShift,
                           TokenKind::RightShift,
                           TokenKind::TripleRightShift) {
             let kind = try!(self.eat_shift_operator());
@@ -1652,8 +1705,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn additive_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.multiplicative_expression());
-        if next_token_is!(self, true, TokenKind::Plus,
-                          TokenKind::Minus) {
+        if next_token_is!(self, true, TokenKind::Plus, TokenKind::Minus) {
             let kind = try!(self.eat_additive_operator());
             let rhs = try!(self.additive_expression());
             let span = Span::new(expr.span.start, rhs.span.stop);
@@ -1678,7 +1730,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn multiplicative_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.unary_expression());
-        if next_token_is!(self, true, TokenKind::Star,
+        if next_token_is!(self,
+                          true,
+                          TokenKind::Star,
                           TokenKind::Div,
                           TokenKind::Percent) {
             let kind = try!(self.eat_multiplicative_operator());
@@ -1705,7 +1759,9 @@ impl<I: Iterator<Item=char>> Parser<I> {
     }
 
     fn unary_expression(&mut self) -> ParseResult<SpannedExpression> {
-        if next_token_is!(self, true, TokenKind::Delete,
+        if next_token_is!(self,
+                          true,
+                          TokenKind::Delete,
                           TokenKind::Void,
                           TokenKind::TypeOf,
                           TokenKind::Plus,
@@ -1717,16 +1773,14 @@ impl<I: Iterator<Item=char>> Parser<I> {
             let expr = Box::new(try!(self.unary_expression()));
             let span = Span::new(kind_span.start, expr.span.stop);
             Ok(Spanned::new(span, Expression::Unary(kind, true, expr)))
-        } else if next_token_is!(self, true, TokenKind::DoublePlus,
-                                 TokenKind::DoubleMinus) {
+        } else if next_token_is!(self, true, TokenKind::DoublePlus, TokenKind::DoubleMinus) {
             let kind = try!(self.eat_update_operator());
             let kind_span = self.last_span;
             let expr = Box::new(try!(self.unary_expression()));
             let _ = try!(self.verify_assignment_lhs(*expr.clone()));
             let span = Span::new(kind_span.start, expr.span.stop);
             Ok(Spanned::new(span, Expression::Update(kind, true, expr)))
-        }
-        else {
+        } else {
             self.postfix_expression()
         }
     }
@@ -1762,8 +1816,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn postfix_expression(&mut self) -> ParseResult<SpannedExpression> {
         let expr = try!(self.left_hand_side_expression());
-        if next_token_is!(self, true, TokenKind::DoublePlus,
-                          TokenKind::DoubleMinus) {
+        if next_token_is!(self, true, TokenKind::DoublePlus, TokenKind::DoubleMinus) {
             let _ = try!(self.verify_assignment_lhs(expr.clone()));
             let token = self.next_token(true).unwrap();
             // this is a restricted production. If this token is
@@ -1810,7 +1863,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                 let args = try!(self.actual_parameters());
                 let Span { stop, .. } = try!(self.eat_token(TokenKind::RightParen, false));
                 Spanned::new(Span::new(start, stop),
-                                Expression::New(Box::new(member), args))
+                             Expression::New(Box::new(member), args))
             } else {
                 // it's not required for a new expression to have arguments.
                 let span = Span::new(start, member.span.stop);
@@ -1855,7 +1908,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
 
     fn actual_parameters(&mut self) -> ParseResult<Vec<SpannedExpression>> {
         if next_token_is!(self, true, TokenKind::RightParen) {
-            return Ok(vec![])
+            return Ok(vec![]);
         }
 
         let mut parameters = vec![];
@@ -1875,7 +1928,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
     fn call_expression(&mut self) -> ParseResult<SpannedExpression> {
         let member = try!(self.member_expression());
         if !next_token_is!(self, false, TokenKind::LeftParen) {
-            return Ok(member)
+            return Ok(member);
         }
 
         // otherwise - it's a call.
@@ -1979,7 +2032,7 @@ impl<I: Iterator<Item=char>> Parser<I> {
                             name: ident,
                             parameters: params,
                             prologue: prolog,
-                            body: body
+                            body: body,
                         }))))
     }
 }

@@ -4,14 +4,14 @@ use std::default::Default;
 #[derive(Clone, PartialEq, Debug)]
 pub struct Program {
     is_strict: bool,
-    statements: Vec<Statement>
+    statements: Vec<Statement>,
 }
 
 impl Program {
     pub fn new() -> Program {
         Program {
             is_strict: false,
-            statements: vec![]
+            statements: vec![],
         }
     }
 
@@ -39,7 +39,7 @@ pub struct Function {
     name: Option<InternedString>,
     parameters: Vec<InternedString>,
     is_strict: bool,
-    body: Vec<Statement>
+    body: Vec<Statement>,
 }
 
 impl Function {
@@ -114,7 +114,7 @@ pub enum Statement {
     While(Expression, Box<Statement>),
     DoWhile(Expression, Box<Statement>),
     ForIn(ForInit, Expression, Box<Statement>),
-    Declaration(Declaration)
+    Declaration(Declaration),
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -135,33 +135,33 @@ pub enum Expression {
     New(Box<Expression>, Vec<Expression>),
     Sequence(Vec<Statement>, Box<Expression>),
     Identifier(InternedString),
-    Literal(Literal)
+    Literal(Literal),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Declaration {
     Function(Function),
-    Variable(Vec<VariableDeclarator>)
+    Variable(Vec<VariableDeclarator>),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct VariableDeclarator {
     pub name: InternedString,
-    pub initial_value: Option<Expression>
+    pub initial_value: Option<Expression>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Property {
     pub key: InternedString,
     pub value: Box<Expression>,
-    pub kind: PropertyKind
+    pub kind: PropertyKind,
 }
 
 #[derive(Clone, PartialEq, Debug, Copy)]
 pub enum PropertyKind {
     Init,
     Get,
-    Set
+    Set,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -172,13 +172,13 @@ pub enum UnaryOperator {
     BitwiseNot,
     Typeof,
     Void,
-    Delete
+    Delete,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum UpdateOperator {
     Increment,
-    Decrement
+    Decrement,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -203,31 +203,31 @@ pub enum BinaryOperator {
     BitwiseXor,
     BitwiseAnd,
     In,
-    Instanceof
+    Instanceof,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum LogicalOperator {
     Or,
-    And
+    And,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct SwitchCase {
     pub test: Option<Expression>,
-    pub body: Vec<Statement>
+    pub body: Vec<Statement>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum ForInit {
     VarDec(Declaration),
-    Expr(Expression)
+    Expr(Expression),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct CatchClause {
     pub param: InternedString,
-    pub body: Box<Statement>
+    pub body: Box<Statement>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -236,5 +236,5 @@ pub enum Literal {
     Boolean(bool),
     Null,
     Numeric(f64),
-    RegExp(InternedString, InternedString)
+    RegExp(InternedString, InternedString),
 }

@@ -28,7 +28,7 @@ pub type Label = usize;
 pub struct CompiledProgram {
     strings: StringInterner,
     functions: Box<[CompiledFunction]>,
-    global_function: Box<[Opcode]>
+    global_function: Box<[Opcode]>,
 }
 
 impl CompiledProgram {
@@ -49,7 +49,7 @@ impl CompiledProgram {
 pub struct CompiledFunction {
     name: Option<InternedString>,
     arity: usize,
-    code: Box<[Opcode]>
+    code: Box<[Opcode]>,
 }
 
 impl CompiledFunction {
@@ -299,7 +299,7 @@ pub trait BytecodeEmitter {
 pub struct GlobalEmitter {
     interner: RefCell<StringInterner>,
     global_opcodes: Vec<Opcode>,
-    label_table: Vec<usize>
+    label_table: Vec<usize>,
 }
 
 impl BytecodeEmitter for GlobalEmitter {
@@ -326,7 +326,7 @@ impl GlobalEmitter {
         GlobalEmitter {
             interner: RefCell::new(interner),
             global_opcodes: vec![],
-            label_table: vec![]
+            label_table: vec![],
         }
     }
 
@@ -335,7 +335,7 @@ impl GlobalEmitter {
         CompiledProgram {
             strings: self.interner.into_inner(),
             functions: functions.into_boxed_slice(),
-            global_function: self.global_opcodes.into_boxed_slice()
+            global_function: self.global_opcodes.into_boxed_slice(),
         }
     }
 }
@@ -345,7 +345,7 @@ pub struct FunctionEmitter {
     index: usize,
     opcodes: Vec<Opcode>,
     name: Option<InternedString>,
-    label_table: Vec<usize>
+    label_table: Vec<usize>,
 }
 
 impl BytecodeEmitter for FunctionEmitter {
@@ -374,7 +374,7 @@ impl FunctionEmitter {
             index: index,
             opcodes: vec![],
             name: None,
-            label_table: vec![]
+            label_table: vec![],
         }
     }
 
@@ -392,7 +392,7 @@ impl FunctionEmitter {
         let compiled = CompiledFunction {
             name: self.name,
             arity: self.arity,
-            code: self.opcodes.into_boxed_slice()
+            code: self.opcodes.into_boxed_slice(),
         };
 
         compiled
@@ -413,23 +413,23 @@ impl FunctionEmitter {
 fn fixup_labels(opcodes: &mut [Opcode], label_table: &[usize]) {
     for (i, opcode) in opcodes.iter_mut().enumerate() {
         let fixed_offset = match *opcode {
-            Opcode::UnfixedBrTrue(index)
-            | Opcode::UnfixedBrFalse(index)
-            | Opcode::UnfixedJump(index) => {
+            Opcode::UnfixedBrTrue(index) |
+            Opcode::UnfixedBrFalse(index) |
+            Opcode::UnfixedJump(index) => {
                 let label = label_table[index];
                 // this label is the absolute index of the target of
                 // this branch. This needs to be converted into an offset.
                 (label as isize) - (i as isize)
             }
             // not every opcode needs to be fixed up, so skip those.
-            _ => continue
+            _ => continue,
         };
 
         *opcode = match *opcode {
             Opcode::UnfixedBrTrue(_) => Opcode::BrTrue(fixed_offset),
             Opcode::UnfixedBrFalse(_) => Opcode::BrFalse(fixed_offset),
             Opcode::UnfixedJump(_) => Opcode::Jump(fixed_offset),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
     }
 }

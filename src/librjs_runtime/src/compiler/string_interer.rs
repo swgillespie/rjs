@@ -6,7 +6,7 @@ pub type InternedString = usize;
 pub struct StringInterner {
     table: Vec<String>,
     index_map: HashMap<String, usize>,
-    gensym_idx: usize
+    gensym_idx: usize,
 }
 
 impl StringInterner {
@@ -14,7 +14,7 @@ impl StringInterner {
         StringInterner {
             table: vec![],
             index_map: HashMap::new(),
-            gensym_idx: 0
+            gensym_idx: 0,
         }
     }
 

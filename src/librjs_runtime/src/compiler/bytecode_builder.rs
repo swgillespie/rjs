@@ -4,7 +4,8 @@
 #![allow(unused_variables, dead_code)]
 
 use super::hir;
-use super::emitter::{BytecodeEmitter, GlobalEmitter, CompiledProgram, CompiledFunction, FunctionEmitter};
+use super::emitter::{BytecodeEmitter, GlobalEmitter, CompiledProgram, CompiledFunction,
+                     FunctionEmitter};
 use super::string_interer::{InternedString, StringInterner};
 
 use std::default::Default;
@@ -15,7 +16,7 @@ pub struct BytecodeBuilder {
     is_strict: bool,
     should_produce_result: bool,
     functions: Vec<CompiledFunction>,
-    function_index: Cell<usize>
+    function_index: Cell<usize>,
 }
 
 impl BytecodeBuilder {
@@ -23,7 +24,10 @@ impl BytecodeBuilder {
         Default::default()
     }
 
-    pub fn lower_program(mut self, program: &hir::Program, interner: StringInterner) -> CompiledProgram {
+    pub fn lower_program(mut self,
+                         program: &hir::Program,
+                         interner: StringInterner)
+                         -> CompiledProgram {
         let mut global_emitter = GlobalEmitter::new(interner);
         self.is_strict = program.is_strict();
 
@@ -40,26 +44,49 @@ impl BytecodeBuilder {
             hir::Statement::Block(ref block) => self.lower_block(emitter, block),
             hir::Statement::Empty => self.lower_empty_statement(emitter),
             hir::Statement::Debugger => self.lower_debugger_statement(emitter),
-            hir::Statement::With(ref expr, ref stmt) => self.lower_with_statement(emitter, expr, stmt),
+            hir::Statement::With(ref expr, ref stmt) => {
+                self.lower_with_statement(emitter, expr, stmt)
+            }
             hir::Statement::Return(ref expr) => self.lower_return_statement(emitter, expr.as_ref()),
-            hir::Statement::Label(label, ref statement) => self.lower_labelled_statement(emitter, label, statement),
+            hir::Statement::Label(label, ref statement) => {
+                self.lower_labelled_statement(emitter, label, statement)
+            }
             hir::Statement::Break(label) => self.lower_break_statement(emitter, label),
             hir::Statement::Continue(label) => self.lower_continue_statement(emitter, label),
-            hir::Statement::If(ref cond, ref true_branch, ref false_branch) =>
-                self.lower_if_statement(emitter, cond, true_branch, false_branch.as_ref().map(|x| &**x)),
-            hir::Statement::Switch(ref cond, ref cases) => self.lower_switch_statement(emitter, cond, cases),
+            hir::Statement::If(ref cond, ref true_branch, ref false_branch) => {
+                self.lower_if_statement(emitter,
+                                        cond,
+                                        true_branch,
+                                        false_branch.as_ref().map(|x| &**x))
+            }
+            hir::Statement::Switch(ref cond, ref cases) => {
+                self.lower_switch_statement(emitter, cond, cases)
+            }
             hir::Statement::Throw(ref expr) => self.lower_throw_statement(emitter, expr),
-            hir::Statement::Try(ref body, ref catch, ref finally) =>
-                self.lower_try_statement(emitter, body, catch.as_ref(), finally.as_ref().map(|x| &**x)),
-            hir::Statement::While(ref cond, ref body) => self.lower_while_statement(emitter, cond, body),
-            hir::Statement::DoWhile(ref cond, ref body) => self.lower_do_while_statement(emitter, cond, body),
-            hir::Statement::ForIn(ref init, ref binding, ref body) =>
-                self.lower_for_in_statement(emitter, init, binding, body),
-            hir::Statement::Declaration(ref declaration) => self.lower_declaration_statement(emitter, declaration)
+            hir::Statement::Try(ref body, ref catch, ref finally) => {
+                self.lower_try_statement(emitter,
+                                         body,
+                                         catch.as_ref(),
+                                         finally.as_ref().map(|x| &**x))
+            }
+            hir::Statement::While(ref cond, ref body) => {
+                self.lower_while_statement(emitter, cond, body)
+            }
+            hir::Statement::DoWhile(ref cond, ref body) => {
+                self.lower_do_while_statement(emitter, cond, body)
+            }
+            hir::Statement::ForIn(ref init, ref binding, ref body) => {
+                self.lower_for_in_statement(emitter, init, binding, body)
+            }
+            hir::Statement::Declaration(ref declaration) => {
+                self.lower_declaration_statement(emitter, declaration)
+            }
         }
     }
 
-    fn lower_expression_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, expr: &hir::Expression) {
+    fn lower_expression_statement<E: BytecodeEmitter>(&mut self,
+                                                      emitter: &mut E,
+                                                      expr: &hir::Expression) {
         // <expr> ; results in evaluating the expression and leaving the evaluated value on the stack.
         // If we're in a situation where a value can't be used, we emit a pop to clear it off the
         // stack.
@@ -107,7 +134,9 @@ impl BytecodeBuilder {
         emitter.emit_exitwith();
     }
 
-    fn lower_return_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, expr: Option<&hir::Expression>) {
+    fn lower_return_statement<E: BytecodeEmitter>(&mut self,
+                                                  emitter: &mut E,
+                                                  expr: Option<&hir::Expression>) {
         if let Some(value) = expr {
             self.lower_expression(emitter, value);
         } else {
@@ -125,11 +154,15 @@ impl BytecodeBuilder {
         self.lower_statement(emitter, stmt);
     }
 
-    fn lower_break_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, ident: Option<InternedString>) {
+    fn lower_break_statement<E: BytecodeEmitter>(&mut self,
+                                                 emitter: &mut E,
+                                                 ident: Option<InternedString>) {
         emitter.emit_not_implemented("break statements");
     }
 
-    fn lower_continue_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, ident: Option<InternedString>) {
+    fn lower_continue_statement<E: BytecodeEmitter>(&mut self,
+                                                    emitter: &mut E,
+                                                    ident: Option<InternedString>) {
         emitter.emit_not_implemented("continue statements");
     }
 
@@ -178,7 +211,9 @@ impl BytecodeBuilder {
         emitter.emit_not_implemented("switch statements");
     }
 
-    fn lower_throw_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, expr: &hir::Expression) {
+    fn lower_throw_statement<E: BytecodeEmitter>(&mut self,
+                                                 emitter: &mut E,
+                                                 expr: &hir::Expression) {
         self.lower_expression(emitter, expr);
         emitter.emit_throw();
     }
@@ -206,9 +241,9 @@ impl BytecodeBuilder {
     }
 
     fn lower_do_while_statement<E: BytecodeEmitter>(&mut self,
-                                                 emitter: &mut E,
-                                                 cond: &hir::Expression,
-                                                 body: &hir::Statement) {
+                                                    emitter: &mut E,
+                                                    cond: &hir::Expression,
+                                                    body: &hir::Statement) {
         let loop_start = emitter.create_label();
         emitter.mark_label(loop_start);
         self.lower_statement(emitter, body);
@@ -224,7 +259,9 @@ impl BytecodeBuilder {
         emitter.emit_not_implemented("for-in loops");
     }
 
-    fn lower_declaration_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, decl: &hir::Declaration) {
+    fn lower_declaration_statement<E: BytecodeEmitter>(&mut self,
+                                                       emitter: &mut E,
+                                                       decl: &hir::Declaration) {
         match *decl {
             hir::Declaration::Function(ref func) => {
                 let func_emitter = self.lower_function(func);
@@ -238,13 +275,13 @@ impl BytecodeBuilder {
                 }
 
                 if index >= self.functions.len() {
-                    for _ in self.functions.len()..index+1 {
+                    for _ in self.functions.len()..index + 1 {
                         self.functions.push(Default::default());
                     }
                 }
 
                 self.functions[index] = compiled_func;
-            },
+            }
             hir::Declaration::Variable(ref vars) => {
                 for decl in vars {
                     if let Some(ref initial_value) = decl.initial_value.as_ref() {
@@ -263,20 +300,31 @@ impl BytecodeBuilder {
         match *expr {
             hir::Expression::This => self.lower_this(emitter),
             hir::Expression::Array(ref values) => self.lower_array_literal(emitter, values),
-            hir::Expression::Object(ref properties) => self.lower_object_literal(emitter, properties),
-            hir::Expression::Function(ref function) => self.lower_function_expression(emitter, function),
-            hir::Expression::Unary(op, prefix, ref expr) => self.lower_unary_op(emitter, op, prefix, expr),
-            hir::Expression::Binary(op, ref left, ref right) => self.lower_binary_op(emitter, op, left, right),
-            hir::Expression::Call(ref base, ref args) =>
-                self.lower_call_expression(emitter, base, args),
-            /*hir::Expression::Logical(op, ref left, ref right) => self.lower_logical_op(op, left, right),
-            hir::Expression::New(ref base, ref args) =>
-                self.lower_new_expression(base, args),*/
+            hir::Expression::Object(ref properties) => {
+                self.lower_object_literal(emitter, properties)
+            }
+            hir::Expression::Function(ref function) => {
+                self.lower_function_expression(emitter, function)
+            }
+            hir::Expression::Unary(op, prefix, ref expr) => {
+                self.lower_unary_op(emitter, op, prefix, expr)
+            }
+            hir::Expression::Binary(op, ref left, ref right) => {
+                self.lower_binary_op(emitter, op, left, right)
+            }
+            hir::Expression::Call(ref base, ref args) => {
+                self.lower_call_expression(emitter, base, args)
+            }
+            // hir::Expression::Logical(op, ref left, ref right) => self.lower_logical_op(op, left, right),
+            // hir::Expression::New(ref base, ref args) =>
+            // self.lower_new_expression(base, args),
             hir::Expression::Sequence(ref seq, ref expr) => self.lower_sequence(emitter, seq, expr),
             hir::Expression::Identifier(ident) => self.lower_identifier(emitter, ident),
             hir::Expression::Literal(ref lit) => self.lower_literal(emitter, lit),
-            hir::Expression::ReferenceAssignment(ident, ref expr) => self.lower_reference_assignment(emitter, ident, expr),
-            ref e => emitter.emit_not_implemented("unimplemented expression")
+            hir::Expression::ReferenceAssignment(ident, ref expr) => {
+                self.lower_reference_assignment(emitter, ident, expr)
+            }
+            ref e => emitter.emit_not_implemented("unimplemented expression"),
         }
     }
 
@@ -285,21 +333,27 @@ impl BytecodeBuilder {
         emitter.emit_this();
     }
 
-    fn lower_object_literal<E: BytecodeEmitter>(&mut self, emitter: &mut E, props: &[hir::Property]) {
+    fn lower_object_literal<E: BytecodeEmitter>(&mut self,
+                                                emitter: &mut E,
+                                                props: &[hir::Property]) {
         emitter.emit_not_implemented("object literals");
     }
 
-    fn lower_array_literal<E: BytecodeEmitter>(&mut self, emitter: &mut E, values: &[Option<hir::Expression>]) {
+    fn lower_array_literal<E: BytecodeEmitter>(&mut self,
+                                               emitter: &mut E,
+                                               values: &[Option<hir::Expression>]) {
         emitter.emit_not_implemented("array literals");
     }
 
-    fn lower_function_expression<E: BytecodeEmitter>(&mut self, emitter: &mut E, func: &hir::Function) {
+    fn lower_function_expression<E: BytecodeEmitter>(&mut self,
+                                                     emitter: &mut E,
+                                                     func: &hir::Function) {
         let func_emitter = self.lower_function(func);
         let index = func_emitter.index();
         let compiled_func = func_emitter.bake();
         emitter.emit_ldlambda(index);
         if index >= self.functions.len() {
-            for _ in self.functions.len()..index+1 {
+            for _ in self.functions.len()..index + 1 {
                 self.functions.push(Default::default());
             }
 
@@ -308,9 +362,15 @@ impl BytecodeBuilder {
         self.functions[index] = compiled_func;
     }
 
-    fn lower_unary_op<E: BytecodeEmitter>(&mut self, emitter: &mut E, op: hir::UnaryOperator, prefix: bool, expr: &hir::Expression) {
+    fn lower_unary_op<E: BytecodeEmitter>(&mut self,
+                                          emitter: &mut E,
+                                          op: hir::UnaryOperator,
+                                          prefix: bool,
+                                          expr: &hir::Expression) {
         if !prefix {
-            panic!("hunch check: what is a non-prefixed unary op? {:?} {:?}", op, expr);
+            panic!("hunch check: what is a non-prefixed unary op? {:?} {:?}",
+                   op,
+                   expr);
         }
 
         if op == hir::UnaryOperator::Delete {
@@ -330,7 +390,7 @@ impl BytecodeBuilder {
             hir::UnaryOperator::Void => {
                 emitter.emit_pop();
                 emitter.emit_ldundefined();
-            },
+            }
         }
     }
 
@@ -342,13 +402,13 @@ impl BytecodeBuilder {
                 // within a with statement.
                 // this inhibits all sorts of optimizations in spidermonkey, which is interesting.
                 emitter.emit_delete_name(ident);
-            },
+            }
             hir::Expression::IdentifierMember(ref base, property) => {
                 // this is a property deletion of the form "delete x.y".
                 // we have to calculate x, and emit a delete property op.
                 self.lower_expression(emitter, base);
                 emitter.emit_delete_property(property);
-            },
+            }
             hir::Expression::CalculatedMember(ref base, ref calculated) => {
                 // this is a property deletion of the form "delete x[y]".
                 self.lower_expression(emitter, base);
@@ -368,7 +428,10 @@ impl BytecodeBuilder {
         }
     }
 
-    fn lower_sequence<E: BytecodeEmitter>(&mut self, emitter: &mut E, seq: &[hir::Statement], expr: &hir::Expression) {
+    fn lower_sequence<E: BytecodeEmitter>(&mut self,
+                                          emitter: &mut E,
+                                          seq: &[hir::Statement],
+                                          expr: &hir::Expression) {
         let old_should_produce = self.should_produce_result;
         self.should_produce_result = false;
         for stmt in seq {
@@ -389,16 +452,23 @@ impl BytecodeBuilder {
             hir::Literal::Null => emitter.emit_ldnull(),
             hir::Literal::Numeric(n) => emitter.emit_ldnum(n),
             hir::Literal::String(s) => emitter.emit_ldstring(s),
-            hir::Literal::RegExp(reg, flags) => emitter.emit_ldregex(reg, flags)
+            hir::Literal::RegExp(reg, flags) => emitter.emit_ldregex(reg, flags),
         }
     }
 
-    fn lower_reference_assignment<E: BytecodeEmitter>(&mut self, emitter: &mut E, ident: InternedString, expr: &hir::Expression) {
+    fn lower_reference_assignment<E: BytecodeEmitter>(&mut self,
+                                                      emitter: &mut E,
+                                                      ident: InternedString,
+                                                      expr: &hir::Expression) {
         self.lower_expression(emitter, expr);
         emitter.emit_stname(ident);
     }
 
-    fn lower_binary_op<E: BytecodeEmitter>(&mut self, emitter: &mut E, op: hir::BinaryOperator, left: &hir::Expression, right: &hir::Expression) {
+    fn lower_binary_op<E: BytecodeEmitter>(&mut self,
+                                           emitter: &mut E,
+                                           op: hir::BinaryOperator,
+                                           left: &hir::Expression,
+                                           right: &hir::Expression) {
         self.lower_expression(emitter, left);
         self.lower_expression(emitter, right);
         match op {
@@ -415,30 +485,33 @@ impl BytecodeBuilder {
             hir::BinaryOperator::LessThan => {
                 emitter.emit_greaterthan_eq();
                 emitter.emit_not();
-            },
+            }
             hir::BinaryOperator::LessThanEq => {
                 emitter.emit_greaterthan();
                 emitter.emit_not();
-            },
+            }
             hir::BinaryOperator::Minus => emitter.emit_sub(),
             hir::BinaryOperator::Mod => emitter.emit_mod(),
             hir::BinaryOperator::NotEqual => {
                 emitter.emit_eq();
                 emitter.emit_not();
-            },
+            }
             hir::BinaryOperator::Plus => emitter.emit_add(),
             hir::BinaryOperator::RightShift => emitter.emit_rightshift(),
             hir::BinaryOperator::StrictEqual => emitter.emit_stricteq(),
             hir::BinaryOperator::StrictNotEqual => {
                 emitter.emit_stricteq();
                 emitter.emit_not();
-            },
+            }
             hir::BinaryOperator::Times => emitter.emit_mul(),
-            hir::BinaryOperator::TripleRightShift => emitter.emit_unsigned_rightshift()
+            hir::BinaryOperator::TripleRightShift => emitter.emit_unsigned_rightshift(),
         }
     }
 
-    fn lower_call_expression<E: BytecodeEmitter>(&mut self, emitter: &mut E, base: &hir::Expression, args: &[hir::Expression]) {
+    fn lower_call_expression<E: BytecodeEmitter>(&mut self,
+                                                 emitter: &mut E,
+                                                 base: &hir::Expression,
+                                                 args: &[hir::Expression]) {
         // call instructions require that the value of `this` be pushed onto the stack in
         // addition to the object being called and the arguments to the function.
         if let hir::Expression::IdentifierMember(ref ident_base, prop) = *base {

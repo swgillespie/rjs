@@ -8,11 +8,10 @@ use super::emitter::{BytecodeEmitter, GlobalEmitter, CompiledProgram, CompiledFu
                      FunctionEmitter};
 use super::string_interer::{InternedString, StringInterner};
 
-use std::default::Default;
 use std::cell::Cell;
 
-#[derive(Default)]
 pub struct BytecodeBuilder {
+    interner: StringInterner,
     is_strict: bool,
     should_produce_result: bool,
     functions: Vec<CompiledFunction>,
@@ -20,22 +19,27 @@ pub struct BytecodeBuilder {
 }
 
 impl BytecodeBuilder {
-    pub fn new() -> BytecodeBuilder {
-        Default::default()
+    pub fn new(interner: StringInterner) -> BytecodeBuilder {
+        BytecodeBuilder {
+            interner: interner,
+            is_strict: false,
+            should_produce_result: false,
+            functions: vec![],
+            function_index: Cell::new(0)
+        }
     }
 
     pub fn lower_program(mut self,
-                         program: &hir::Program,
-                         interner: StringInterner)
+                         program: &hir::Program)
                          -> CompiledProgram {
-        let mut global_emitter = GlobalEmitter::new(interner);
+        let mut global_emitter = GlobalEmitter::new();
         self.is_strict = program.is_strict();
 
         for stmt in program.statements() {
             self.lower_statement(&mut global_emitter, stmt);
         }
 
-        global_emitter.bake(self.functions)
+        global_emitter.bake(self.functions, self.interner)
     }
 
     fn lower_statement<E: BytecodeEmitter>(&mut self, emitter: &mut E, stmt: &hir::Statement) {
@@ -98,6 +102,11 @@ impl BytecodeBuilder {
     }
 
     fn lower_block<E: BytecodeEmitter>(&mut self, emitter: &mut E, stmts: &[hir::Statement]) {
+        if stmts.is_empty() {
+            // nothing to do here if the block is empty.
+            return;
+        }
+
         let (init, last) = stmts.split_at(stmts.len() - 1);
         let saved = self.should_produce_result;
 
@@ -315,16 +324,25 @@ impl BytecodeBuilder {
             hir::Expression::Call(ref base, ref args) => {
                 self.lower_call_expression(emitter, base, args)
             }
-            // hir::Expression::Logical(op, ref left, ref right) => self.lower_logical_op(op, left, right),
-            // hir::Expression::New(ref base, ref args) =>
-            // self.lower_new_expression(base, args),
+            hir::Expression::Logical(op, ref left, ref right) => {
+                self.lower_logical_op(emitter, op, left, right)
+            }
+            hir::Expression::New(ref base, ref args) => self.lower_new_expression(emitter, base, args),
             hir::Expression::Sequence(ref seq, ref expr) => self.lower_sequence(emitter, seq, expr),
             hir::Expression::Identifier(ident) => self.lower_identifier(emitter, ident),
             hir::Expression::Literal(ref lit) => self.lower_literal(emitter, lit),
             hir::Expression::ReferenceAssignment(ident, ref expr) => {
                 self.lower_reference_assignment(emitter, ident, expr)
             }
-            ref e => emitter.emit_not_implemented("unimplemented expression"),
+            hir::Expression::LValueAssignment(ref base, ref expr) => {
+                self.lower_lvalue_assignment(emitter, base, expr)
+            }
+            hir::Expression::IdentifierMember(ref base, member) => {
+                self.lower_identifier_member(emitter, base, member)
+            }
+            hir::Expression::CalculatedMember(ref base, ref prop) => {
+                self.lower_calculated_member(emitter, base, prop)
+            }
         }
     }
 
@@ -336,13 +354,36 @@ impl BytecodeBuilder {
     fn lower_object_literal<E: BytecodeEmitter>(&mut self,
                                                 emitter: &mut E,
                                                 props: &[hir::Property]) {
-        emitter.emit_not_implemented("object literals");
+        // first and foremost, we're creating a new object.
+        emitter.emit_ldobject();
+        for prop in props {
+            // for every property in the literal, we need to define it on the object.
+            let name = prop.key;
+            self.lower_expression(emitter, &*prop.value); // expr obj
+            match prop.kind {
+                hir::PropertyKind::Init => emitter.emit_init_property(name),
+                hir::PropertyKind::Get => emitter.emit_init_property_getter(name),
+                hir::PropertyKind::Set => emitter.emit_init_property_setter(name)
+            }
+
+            // obj is back on the stack
+        }
     }
 
     fn lower_array_literal<E: BytecodeEmitter>(&mut self,
                                                emitter: &mut E,
                                                values: &[Option<hir::Expression>]) {
-        emitter.emit_not_implemented("array literals");
+        // for the first release, no attempt to optimize arrays into array-based representations
+        // is done. We treat them exactly as objects.
+        emitter.emit_ldobject();
+        for (index, value) in values.iter().enumerate() {
+            if let Some(initializer) = value.as_ref() {
+                // the spec dictates that we do not emit a property for any elided entries.
+                let prop_name = self.interner.intern(index.to_string());
+                self.lower_expression(emitter, initializer);
+                emitter.emit_init_property(prop_name);
+            }
+        }
     }
 
     fn lower_function_expression<E: BytecodeEmitter>(&mut self,
@@ -426,6 +467,43 @@ impl BytecodeBuilder {
                 emitter.emit_ldbool(true);
             }
         }
+    }
+
+    fn lower_logical_op<E: BytecodeEmitter>(&mut self,
+                                            emitter: &mut E,
+                                            op: hir::LogicalOperator,
+                                            left: &hir::Expression,
+                                            right: &hir::Expression) {
+        // for logical operators, we have to perform short-circuit evaluation.
+        // this means that:
+        //   1) for AND nodes, we have to emit a branch that does not evaluate the RHS
+        //      if the LHS is false, and
+        //   2) for OR nodes, we have to emit a branch that does not evavluate the RHS
+        //      if the LHS is true.
+        self.lower_expression(emitter, left);
+        let short_circut_label = emitter.create_label();
+        match op {
+            hir::LogicalOperator::Or => emitter.emit_or(short_circut_label),
+            hir::LogicalOperator::And => emitter.emit_and(short_circut_label),
+        }
+
+        emitter.emit_pop();
+        self.lower_expression(emitter, right);
+        emitter.mark_label(short_circut_label);
+    }
+
+    fn lower_new_expression<E: BytecodeEmitter>(&mut self,
+                                                emitter: &mut E,
+                                                base: &hir::Expression,
+                                                args: &[hir::Expression]) {
+        // new expressions are similar to call expressions, except it invokes
+        // the [[Constructor]] internal method and not the [[Call]] one.
+        self.lower_expression(emitter, base);
+        for arg in args {
+            self.lower_expression(emitter, arg);
+        }
+
+        emitter.emit_new(args.len());
     }
 
     fn lower_sequence<E: BytecodeEmitter>(&mut self,
@@ -544,6 +622,47 @@ impl BytecodeBuilder {
         // call - pops args.len() arguments off the stack, pops `this`, and pops
         // an object and invokes the [[Call]] internal method on it.
         emitter.emit_call(args.len());
+    }
+
+    fn lower_lvalue_assignment<E: BytecodeEmitter>(&mut self,
+                                                   emitter: &mut E,
+                                                   base: &hir::Expression,
+                                                   value: &hir::Expression) {
+        // similar to Call nodes, we need to look at the base expression to see
+        // what to emit.
+        if let hir::Expression::IdentifierMember(ref ident_base, prop) = *base {
+            self.lower_expression(emitter, ident_base);
+            self.lower_expression(emitter, value);
+            emitter.emit_put_property(prop);
+        } else if let hir::Expression::CalculatedMember(ref ident_base, ref prop_base) = *base {
+            self.lower_expression(emitter, ident_base); // base
+            self.lower_expression(emitter, prop_base);  // prop base
+            self.lower_expression(emitter, value);      // value prop base
+            emitter.emit_put_element();
+        } else if let hir::Expression::Identifier(name) = *base {
+            self.lower_expression(emitter, value);
+            emitter.emit_stname(name);
+        } else {
+            // this is impossible with the way the parser works today.
+            unreachable!("unexpected lvalue node: {:?}", base);
+        }
+    }
+
+    fn lower_identifier_member<E: BytecodeEmitter>(&mut self,
+                                                   emitter: &mut E,
+                                                   base: &hir::Expression,
+                                                   ident: InternedString) {
+        self.lower_expression(emitter, base);
+        emitter.emit_get_property(ident);
+    }
+
+    fn lower_calculated_member<E: BytecodeEmitter>(&mut self,
+                                                   emitter: &mut E,
+                                                   base: &hir::Expression,
+                                                   prop: &hir::Expression) {
+        self.lower_expression(emitter, base);
+        self.lower_expression(emitter, prop);
+        emitter.emit_get_element();
     }
 
     fn lower_function<'a>(&mut self, func: &hir::Function) -> FunctionEmitter {

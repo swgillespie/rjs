@@ -130,7 +130,6 @@ pub enum Expression {
     Logical(LogicalOperator, Box<Expression>, Box<Expression>),
     IdentifierMember(Box<Expression>, InternedString),
     CalculatedMember(Box<Expression>, Box<Expression>),
-    Conditional(Box<Expression>, Box<Expression>, Box<Expression>),
     Call(Box<Expression>, Vec<Expression>),
     New(Box<Expression>, Vec<Expression>),
     Sequence(Vec<Statement>, Box<Expression>),

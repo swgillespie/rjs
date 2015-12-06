@@ -20,8 +20,6 @@
 use super::string_interer::{StringInterner, InternedString};
 use super::bytecode::Opcode;
 
-use std::cell::RefCell;
-
 pub type Offset = isize;
 pub type Label = usize;
 
@@ -159,12 +157,12 @@ pub trait BytecodeEmitter {
         self.emit_opcode(Opcode::InstanceOf);
     }
 
-    fn emit_and(&mut self) {
-        self.emit_opcode(Opcode::And);
+    fn emit_and(&mut self, label: Label) {
+        self.emit_opcode(Opcode::UnfixedAnd(label));
     }
 
-    fn emit_or(&mut self) {
-        self.emit_opcode(Opcode::Or);
+    fn emit_or(&mut self, label: Label) {
+        self.emit_opcode(Opcode::UnfixedOr(label));
     }
 
     fn emit_eq(&mut self) {
@@ -209,6 +207,18 @@ pub trait BytecodeEmitter {
 
     fn emit_put_element(&mut self) {
         self.emit_opcode(Opcode::PutElement);
+    }
+
+    fn emit_init_property(&mut self, name: InternedString) {
+        self.emit_opcode(Opcode::InitProperty(name));
+    }
+
+    fn emit_init_property_getter(&mut self, name: InternedString) {
+        self.emit_opcode(Opcode::InitPropertyGetter(name));
+    }
+
+    fn emit_init_property_setter(&mut self, name: InternedString) {
+        self.emit_opcode(Opcode::InitPropertySetter(name));
     }
 
     fn emit_enterwith(&mut self) {
@@ -271,6 +281,10 @@ pub trait BytecodeEmitter {
         self.emit_opcode(Opcode::LdLambda(idx));
     }
 
+    fn emit_ldobject(&mut self) {
+        self.emit_opcode(Opcode::LdObject);
+    }
+
     fn emit_ret(&mut self) {
         self.emit_opcode(Opcode::Ret);
     }
@@ -281,6 +295,10 @@ pub trait BytecodeEmitter {
 
     fn emit_call(&mut self, args: usize) {
         self.emit_opcode(Opcode::Call(args));
+    }
+
+    fn emit_new(&mut self, args: usize) {
+        self.emit_opcode(Opcode::New(args));
     }
 
     fn emit_this(&mut self) {
@@ -297,7 +315,6 @@ pub trait BytecodeEmitter {
 }
 
 pub struct GlobalEmitter {
-    interner: RefCell<StringInterner>,
     global_opcodes: Vec<Opcode>,
     label_table: Vec<usize>,
 }
@@ -322,18 +339,17 @@ impl BytecodeEmitter for GlobalEmitter {
 }
 
 impl GlobalEmitter {
-    pub fn new(interner: StringInterner) -> GlobalEmitter {
+    pub fn new() -> GlobalEmitter {
         GlobalEmitter {
-            interner: RefCell::new(interner),
             global_opcodes: vec![],
             label_table: vec![],
         }
     }
 
-    pub fn bake(mut self, functions: Vec<CompiledFunction>) -> CompiledProgram {
+    pub fn bake(mut self, functions: Vec<CompiledFunction>, interner: StringInterner) -> CompiledProgram {
         fixup_labels(&mut self.global_opcodes, &self.label_table);
         CompiledProgram {
-            strings: self.interner.into_inner(),
+            strings: interner,
             functions: functions.into_boxed_slice(),
             global_function: self.global_opcodes.into_boxed_slice(),
         }
@@ -413,6 +429,8 @@ impl FunctionEmitter {
 fn fixup_labels(opcodes: &mut [Opcode], label_table: &[usize]) {
     for (i, opcode) in opcodes.iter_mut().enumerate() {
         let fixed_offset = match *opcode {
+            Opcode::UnfixedAnd(index) |
+            Opcode::UnfixedOr(index) |
             Opcode::UnfixedBrTrue(index) |
             Opcode::UnfixedBrFalse(index) |
             Opcode::UnfixedJump(index) => {
@@ -426,6 +444,8 @@ fn fixup_labels(opcodes: &mut [Opcode], label_table: &[usize]) {
         };
 
         *opcode = match *opcode {
+            Opcode::UnfixedAnd(_) => Opcode::And(fixed_offset),
+            Opcode::UnfixedOr(_) => Opcode::Or(fixed_offset),
             Opcode::UnfixedBrTrue(_) => Opcode::BrTrue(fixed_offset),
             Opcode::UnfixedBrFalse(_) => Opcode::BrFalse(fixed_offset),
             Opcode::UnfixedJump(_) => Opcode::Jump(fixed_offset),

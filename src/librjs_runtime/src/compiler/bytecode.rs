@@ -71,12 +71,12 @@ pub enum Opcode {
     /// the result onto the stack.
     InstanceOf,
     // logical operators
-    /// Pops two values `x` and `y` from the stack, calculates `x && y`,
-    /// and pushes the result onto the stack.
-    And,
-    /// Pops two values `x` and `y` from the stack, calculates `x || y`,
-    /// and pushes the result onto the stack.
-    Or,
+    /// Pops a value off the stack, converts it to a boolean, pushes it
+    /// back onto the stack, and jumps the given offset if the value is `false`
+    And(isize),
+    /// Pops a value off the stack, converts it to a boolean, pushes it
+    /// back onto the stack, and jumps the given offset if the value is `true`
+    Or(isize),
     // comparison operators
     /// Pops two values from the stack and pushes a `true` if the two
     /// values are equal.
@@ -113,6 +113,15 @@ pub enum Opcode {
     /// Pops an object, a string, and a value from the stack and calls
     /// [[Put]] upon the property with the string name.
     PutElement,
+    /// Pops an object and a value off the stack, defines a property with that
+    /// name on the object, and pushes the object back onto the stack.
+    InitProperty(InternedString),
+    /// Pops an object and a value off the stack, defines a property getter with that
+    /// name on the object, and pushes the object back onto the stack.
+    InitPropertyGetter(InternedString),
+    /// Pops an object and a value off the stack, defines a property setter with that
+    /// name on the object, and pushes the object back onto the stack.
+    InitPropertySetter(InternedString),
     // with statement opcodes
     /// Pops an object from the stack and uses it to enter a `with` block,
     /// which exposes the object's properties as identifiers.
@@ -154,6 +163,8 @@ pub enum Opcode {
     /// be combined with `make_closure` to fill in the free variable vector
     /// with appropriate values.
     LdLambda(usize),
+    /// Pushes a new empty object onto the stack.
+    LdObject,
     // control flow
     /// Pops a value off the stack and returns from the current function
     /// with that value.
@@ -164,6 +175,10 @@ pub enum Opcode {
     /// invokes that function object with the given arguments, pushing the return value
     /// of the function onto the stack.
     Call(usize),
+    /// Pops an object and some number of arguments off the stacck and invokes
+    /// the [[Construct]] internal method on that object with the given arguments,
+    /// pushing the result onto the stack.
+    New(usize),
     // environment manipulation
     /// Pops a value off of the stack and adds it to the current environment
     /// record with the current name.
@@ -172,6 +187,8 @@ pub enum Opcode {
     This,
     // branching fixups for the emit stage. These should not persist
     // at runtime
+    UnfixedAnd(usize),
+    UnfixedOr(usize),
     UnfixedBrTrue(usize),
     UnfixedBrFalse(usize),
     UnfixedJump(usize),

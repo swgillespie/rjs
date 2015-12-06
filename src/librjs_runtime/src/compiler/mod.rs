@@ -26,6 +26,6 @@ pub fn lower_statement_to_hir(interner: &mut string_interer::StringInterner,
 pub fn lower_hir_to_bytecode(interner: string_interer::StringInterner,
                              hir: &hir::Program)
                              -> emitter::CompiledProgram {
-    let builder = bytecode_builder::BytecodeBuilder::new();
-    builder.lower_program(hir, interner)
+    let builder = bytecode_builder::BytecodeBuilder::new(interner);
+    builder.lower_program(hir)
 }

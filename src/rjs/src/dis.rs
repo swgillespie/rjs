@@ -19,14 +19,15 @@ pub fn disassemble_function(function: &emitter::CompiledFunction,
     println!("function \"{}\":", name);
     println!("  arity: {}", function.arity());
     println!("  code:");
-    for op in function.code() {
-        print_op(*op, interner);
+    for (idx, op) in function.code().iter().enumerate() {
+        print_op(idx, *op, interner);
     }
 
     println!("");
 }
 
-pub fn print_op(op: bytecode::Opcode, interner: &string_interer::StringInterner) {
+pub fn print_op(idx: usize, op: bytecode::Opcode, interner: &string_interer::StringInterner) {
+    print!("{:04}:", idx);
     match op {
         Opcode::Nop => println!("    nop"),
         Opcode::Dup => println!("    dup"),
@@ -50,8 +51,8 @@ pub fn print_op(op: bytecode::Opcode, interner: &string_interer::StringInterner)
         Opcode::RightShift => println!("    rshift"),
         Opcode::UnsignedRightShift => println!("    urshift"),
         Opcode::InstanceOf => println!("    instanceof"),
-        Opcode::And => println!("    and"),
-        Opcode::Or => println!("    or"),
+        Opcode::And(o) => println!("    and {} ({})", o, 1 + o + idx as isize),
+        Opcode::Or(o) => println!("    or {} ({})", o, 1 + o + idx as isize),
         Opcode::Eq => println!("    eq"),
         Opcode::StrictEq => println!("    stricteq"),
         Opcode::GreaterThan => println!("    gt"),
@@ -67,9 +68,9 @@ pub fn print_op(op: bytecode::Opcode, interner: &string_interer::StringInterner)
         Opcode::ExitWith => println!("    exitwith"),
         Opcode::LdName(s) => println!("    ldname {}", interner.get(s)),
         Opcode::StName(s) => println!("    stname {}", interner.get(s)),
-        Opcode::BrTrue(o) => println!("    brtrue {}", o),
-        Opcode::BrFalse(o) => println!("    brfalse {}", o),
-        Opcode::Jump(o) => println!("    jump {}", o),
+        Opcode::BrTrue(o) => println!("    brtrue {} ({})", o, 1 + o + idx as isize),
+        Opcode::BrFalse(o) => println!("    brfalse {} ({})", o, 1 + o + idx as isize),
+        Opcode::Jump(o) => println!("    jump {} ({})", o, 1 + o + idx as isize),
         Opcode::Debugger => println!("    debugger"),
         Opcode::LdNum(f) => println!("    ldnum {}", f),
         Opcode::LdBool(b) => println!("    ldbool {}", b),
@@ -83,7 +84,13 @@ pub fn print_op(op: bytecode::Opcode, interner: &string_interer::StringInterner)
         Opcode::Def(s) => println!("    def {}", interner.get(s)),
         Opcode::This => println!("    this"),
         Opcode::Call(i) => println!("    call {}", i),
+        Opcode::New(i) => println!("    new {}", i),
         Opcode::NotImplemented(s) => println!("    not_implemented {}", s),
-        e => panic!("invalid opcode: {:?}", e),
+        Opcode::InitProperty(s) => println!("    initproperty \"{}\"", interner.get(s)),
+        Opcode::InitPropertyGetter(s) => println!("    initproperty \"{}\"", interner.get(s)),
+        Opcode::InitPropertySetter(s) => println!("    initproperty \"{}\"", interner.get(s)),
+        Opcode::LdObject => println!("    ldobject"),
+        Opcode::UnfixedBrFalse(_) | Opcode::UnfixedBrTrue(_) | Opcode::UnfixedJump(_)
+        | Opcode::UnfixedAnd(_) | Opcode::UnfixedOr(_) => panic!("this opcodes should never be emitted: {:?}", op)
     }
 }

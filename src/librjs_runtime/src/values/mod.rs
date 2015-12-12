@@ -52,26 +52,123 @@
 //!   is used for specification and implementation purposes.
 
 mod object;
+mod activation;
 
-use super::heap::{RootedPtr, ToHeapObject, HeapObject, Trace};
+use super::heap::{self, RootedPtr, ToHeapObject, HeapObject, Trace};
 use std::vec::IntoIter;
+use std::default::Default;
 
 pub use self::object::Object;
+pub use self::activation::Activation;
 
 pub type RootedValue = RootedPtr<Value>;
-pub struct Value;
+
+#[derive(Copy, Clone)]
+pub enum Value {
+    // `undefined`, the sentinel of ECMAScript
+    Undefined,
+    // `null`, the value of the null object
+    Null,
+    // numbers
+    Number(heap::NumberPtr),
+    NumberObject(heap::NumberPtr),
+    // booleans
+    Boolean(heap::BooleanPtr),
+    BooleanObject(heap::BooleanPtr),
+    // strings
+    String(heap::StringPtr),
+    StringObject(heap::StringPtr),
+    // objects
+    Object(heap::ObjectPtr)
+}
 
 impl ToHeapObject for Value {
     fn to_heap_object(&self) -> Option<HeapObject> {
-        unimplemented!()
+        match *self {
+            Value::Null | Value::Undefined => None,
+            Value::Number(ptr) | Value::NumberObject(ptr) => ptr.to_heap_object(),
+            Value::Boolean(ptr) | Value::BooleanObject(ptr) => ptr.to_heap_object(),
+            Value::String(ptr) | Value::StringObject(ptr) => ptr.to_heap_object(),
+            Value::Object(ptr) => ptr.to_heap_object()
+        }
     }
 }
 
-pub struct Property;
-
-impl Trace for Property {
+impl Trace for Value {
     fn trace(&self) -> IntoIter<HeapObject> {
-        unimplemented!()
+        if let Some(heap_obj) = self.to_heap_object() {
+            heap_obj.trace()
+        } else {
+            vec![].into_iter()
+        }
+    }
+}
+
+impl Default for Value {
+    fn default() -> Value {
+        Value::Undefined
+    }
+}
+
+impl Value {
+    pub fn undefined() -> Value {
+        Value::Undefined
+    }
+
+    pub fn null() -> Value {
+        Value::Null
+    }
+
+    pub fn number(ptr: heap::NumberPtr) -> Value {
+        Value::Number(ptr)
+    }
+
+    pub fn number_object(ptr: heap::NumberPtr) -> Value {
+        Value::NumberObject(ptr)
+    }
+
+    pub fn boolean(ptr: heap::BooleanPtr) -> Value {
+        Value::Boolean(ptr)
+    }
+
+    pub fn boolean_object(ptr: heap::BooleanPtr) -> Value {
+        Value::BooleanObject(ptr)
+    }
+
+    pub fn string(ptr: heap::StringPtr) -> Value {
+        Value::String(ptr)
+    }
+
+    pub fn string_object(ptr: heap::StringPtr) -> Value {
+        Value::StringObject(ptr)
+    }
+
+    pub fn object(ptr: heap::ObjectPtr) -> Value {
+        Value::Object(ptr)
+    }
+
+    pub fn is_undefined(&self) -> bool {
+        if let Value::Undefined = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_null(&self) -> bool {
+        if let Value::Null = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn unwrap_object(&self) -> heap::ObjectPtr {
+        if let Value::Object(ptr) = *self {
+            return ptr;
+        }
+
+        panic!("unwrap_object called on non-object value");
     }
 }
 

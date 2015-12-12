@@ -2,10 +2,13 @@
 
 pub mod bytecode;
 pub mod hir;
-pub mod hir_builder;
-pub mod string_interer;
-pub mod emitter;
-pub mod bytecode_builder;
+mod hir_builder;
+mod string_interer;
+mod emitter;
+mod bytecode_builder;
+
+pub use self::emitter::{CompiledFunction, CompiledProgram};
+pub use self::string_interer::{InternedString, StringInterner};
 
 use librjs_syntax::ast::{Program, SpannedStatement};
 

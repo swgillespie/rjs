@@ -1,15 +1,15 @@
-use librjs::runtime::compiler::{emitter, string_interer};
+use librjs::runtime::compiler;
 use librjs::runtime::compiler::bytecode::{self, Opcode};
 
-pub fn disassemble_program(compiled: &emitter::CompiledProgram) {
+pub fn disassemble_program(compiled: &compiler::CompiledProgram) {
     println!("disassembling program");
     for function in compiled.functions() {
         disassemble_function(function, compiled.interner());
     }
 }
 
-pub fn disassemble_function(function: &emitter::CompiledFunction,
-                            interner: &string_interer::StringInterner) {
+pub fn disassemble_function(function: &compiler::CompiledFunction,
+                            interner: &compiler::StringInterner) {
     let name = if let Some(name) = function.name() {
         interner.get(name)
     } else {
@@ -26,7 +26,7 @@ pub fn disassemble_function(function: &emitter::CompiledFunction,
     println!("");
 }
 
-pub fn print_op(idx: usize, op: bytecode::Opcode, interner: &string_interer::StringInterner) {
+pub fn print_op(idx: usize, op: bytecode::Opcode, interner: &compiler::StringInterner) {
     print!("{:04}:", idx);
     match op {
         Opcode::Nop => println!("    nop"),

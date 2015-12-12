@@ -8,7 +8,7 @@ use std::io::{self, Read, Write, StdoutLock};
 use std::fs::File;
 use std::env;
 use librjs::syntax::{Lexer, Parser};
-use librjs::runtime::compiler::{self, string_interer};
+use librjs::runtime::compiler;
 use time::Duration;
 use std::ffi::CString;
 
@@ -19,7 +19,7 @@ fn main() {
         return;
     }
 
-    let mut interner = string_interer::StringInterner::new();
+    let mut interner = compiler::StringInterner::new();
     let stdout_unlocked = io::stdout();
     let mut stdout = stdout_unlocked.lock();
     let prompt = CString::new(">> ").unwrap();
@@ -39,7 +39,7 @@ fn main() {
 
 fn parse_and_print(data: &str,
                    stdout: &mut StdoutLock,
-                   interner: &mut string_interer::StringInterner) {
+                   interner: &mut compiler::StringInterner) {
     let lexer = Lexer::new(data.chars());
     let mut parser = Parser::new(lexer);
     let ast = match parser.parse_statement() {
@@ -78,7 +78,7 @@ fn parse_file(filename: &str) {
         return;
     };
 
-    let mut interner = string_interer::StringInterner::new();
+    let mut interner = compiler::StringInterner::new();
     let mut hir = None;
     let hir_time = Duration::span(|| {
         hir = Some(compiler::lower_program_to_hir(&mut interner, &real_ast));

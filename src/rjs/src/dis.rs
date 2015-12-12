@@ -90,7 +90,10 @@ pub fn print_op(idx: usize, op: bytecode::Opcode, interner: &compiler::StringInt
         Opcode::InitPropertyGetter(s) => println!("    initproperty \"{}\"", interner.get(s)),
         Opcode::InitPropertySetter(s) => println!("    initproperty \"{}\"", interner.get(s)),
         Opcode::LdObject => println!("    ldobject"),
-        Opcode::UnfixedBrFalse(_) | Opcode::UnfixedBrTrue(_) | Opcode::UnfixedJump(_)
-        | Opcode::UnfixedAnd(_) | Opcode::UnfixedOr(_) => panic!("this opcodes should never be emitted: {:?}", op)
+        Opcode::UnfixedBrFalse(_) |
+        Opcode::UnfixedBrTrue(_) |
+        Opcode::UnfixedJump(_) |
+        Opcode::UnfixedAnd(_) |
+        Opcode::UnfixedOr(_) => panic!("this opcodes should never be emitted: {:?}", op),
     }
 }

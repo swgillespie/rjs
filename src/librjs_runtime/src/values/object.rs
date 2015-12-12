@@ -16,7 +16,7 @@ use std::collections::HashMap;
 
 pub enum Object {
     Standard(StandardObject),
-    HostObject(Box<HostObject>)
+    HostObject(Box<HostObject>),
 }
 
 impl Default for Object {
@@ -30,7 +30,7 @@ impl Trace for Object {
     fn trace(&self) -> IntoIter<HeapObject> {
         match *self {
             Object::Standard(ref stdobj) => stdobj.trace(),
-            Object::HostObject(ref hostobj) => hostobj.trace()
+            Object::HostObject(ref hostobj) => hostobj.trace(),
         }
     }
 }
@@ -39,49 +39,52 @@ impl HostObject for Object {
     fn get_prototype(&mut self, ee: &mut ExecutionEngine) -> RootedValue {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get_prototype(ee),
-            Object::HostObject(ref mut hostobj) => hostobj.get_prototype(ee)
+            Object::HostObject(ref mut hostobj) => hostobj.get_prototype(ee),
         }
     }
 
     fn set_prototype(&mut self, ee: &mut ExecutionEngine, value: &RootedValue) {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.set_prototype(ee, value),
-            Object::HostObject(ref mut hostobj) => hostobj.set_prototype(ee, value)
+            Object::HostObject(ref mut hostobj) => hostobj.set_prototype(ee, value),
         }
     }
 
     fn class(&mut self, ee: &mut ExecutionEngine) -> &'static str {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.class(ee),
-            Object::HostObject(ref mut hostobj) => hostobj.class(ee)
+            Object::HostObject(ref mut hostobj) => hostobj.class(ee),
         }
     }
 
     fn is_extensible(&mut self, ee: &mut ExecutionEngine) -> bool {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.is_extensible(ee),
-            Object::HostObject(ref mut hostobj) => hostobj.is_extensible(ee)
+            Object::HostObject(ref mut hostobj) => hostobj.is_extensible(ee),
         }
     }
 
     fn get(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> EvalValue {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.get(ee, property_name)
+            Object::HostObject(ref mut hostobj) => hostobj.get(ee, property_name),
         }
     }
 
-    fn get_own_property(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> Option<Property> {
+    fn get_own_property(&mut self,
+                        ee: &mut ExecutionEngine,
+                        property_name: InternedString)
+                        -> Option<Property> {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get_own_property(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.get_own_property(ee, property_name)
+            Object::HostObject(ref mut hostobj) => hostobj.get_own_property(ee, property_name),
         }
     }
 
     fn get_property(&mut self, ee: &mut ExecutionEngine, name: InternedString) -> Option<Property> {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get_property(ee, name),
-            Object::HostObject(ref mut hostobj) => hostobj.get_property(ee, name)
+            Object::HostObject(ref mut hostobj) => hostobj.get_property(ee, name),
         }
     }
 
@@ -89,39 +92,46 @@ impl HostObject for Object {
            ee: &mut ExecutionEngine,
            property_name: InternedString,
            value: &RootedValue,
-           should_throw: bool) -> EvalResult<()> {
+           should_throw: bool)
+           -> EvalResult<()> {
 
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.put(ee, property_name, value, should_throw),
-            Object::HostObject(ref mut hostobj) => hostobj.put(ee, property_name, value, should_throw)
+            Object::HostObject(ref mut hostobj) => {
+                hostobj.put(ee, property_name, value, should_throw)
+            }
         }
     }
 
     fn can_put(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.can_put(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.can_put(ee, property_name)
+            Object::HostObject(ref mut hostobj) => hostobj.can_put(ee, property_name),
         }
     }
 
     fn has_property(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.has_property(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.has_property(ee, property_name)
+            Object::HostObject(ref mut hostobj) => hostobj.has_property(ee, property_name),
         }
     }
 
-    fn delete(&mut self, ee: &mut ExecutionEngine, property_name: InternedString, should_throw: bool) -> EvalResult<bool> {
+    fn delete(&mut self,
+              ee: &mut ExecutionEngine,
+              property_name: InternedString,
+              should_throw: bool)
+              -> EvalResult<bool> {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.delete(ee, property_name, should_throw),
-            Object::HostObject(ref mut hostobj) => hostobj.delete(ee, property_name, should_throw)
+            Object::HostObject(ref mut hostobj) => hostobj.delete(ee, property_name, should_throw),
         }
     }
 
     fn default_value(&mut self, ee: &mut ExecutionEngine, hint: &RootedValue) -> RootedValue {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.default_value(ee, hint),
-            Object::HostObject(ref mut hostobj) => hostobj.default_value(ee, hint)
+            Object::HostObject(ref mut hostobj) => hostobj.default_value(ee, hint),
         }
     }
 
@@ -132,8 +142,12 @@ impl HostObject for Object {
                            should_throw: bool)
                            -> bool {
         match *self {
-            Object::Standard(ref mut stdobj) => stdobj.define_own_property(ee, property_name, property, should_throw),
-            Object::HostObject(ref mut hostobj) => hostobj.define_own_property(ee, property_name, property, should_throw)
+            Object::Standard(ref mut stdobj) => {
+                stdobj.define_own_property(ee, property_name, property, should_throw)
+            }
+            Object::HostObject(ref mut hostobj) => {
+                hostobj.define_own_property(ee, property_name, property, should_throw)
+            }
         }
     }
 }
@@ -144,23 +158,25 @@ pub enum Property {
         value: Option<Value>,
         writable: Option<bool>,
         enumerable: Option<bool>,
-        configurable: Option<bool>
+        configurable: Option<bool>,
     },
     Accessor {
         get: Option<Value>,
         set: Option<Value>,
         enumerable: Option<bool>,
-        configurable: Option<bool>
-    }
+        configurable: Option<bool>,
+    },
 }
 
 impl Trace for Property {
     fn trace(&self) -> IntoIter<HeapObject> {
         let mut pointers = vec![];
         match *self {
-            Property::Named { value: Some(value), .. } => if let Some(ptr) = value.to_heap_object() {
-                pointers.push(ptr);
-            },
+            Property::Named { value: Some(value), .. } => {
+                if let Some(ptr) = value.to_heap_object() {
+                    pointers.push(ptr);
+                }
+            }
             Property::Accessor { get: maybe_get, set: maybe_set, .. } => {
                 if let Some(get) = maybe_get {
                     if let Some(ptr) = get.to_heap_object() {
@@ -173,7 +189,7 @@ impl Trace for Property {
                         pointers.push(ptr);
                     }
                 }
-            },
+            }
             _ => {}
         }
 
@@ -269,7 +285,7 @@ impl Property {
     fn unwrap_configurable(&self) -> bool {
         let configurable = match *self {
             Property::Named { configurable, .. } => configurable,
-            Property::Accessor { configurable, .. } => configurable
+            Property::Accessor { configurable, .. } => configurable,
         };
 
         if let Some(actual_configurable) = configurable {
@@ -283,12 +299,12 @@ impl Property {
 #[derive(Default)]
 pub struct StandardObject {
     prototype: Value,
-    backing_storage: HashMap<InternedString, Property>
+    backing_storage: HashMap<InternedString, Property>,
 }
 
 impl Trace for StandardObject {
     fn trace(&self) -> IntoIter<HeapObject> {
-        let mut pointers : Vec<_> = self.prototype.trace().collect();
+        let mut pointers: Vec<_> = self.prototype.trace().collect();
         for value in self.backing_storage.values() {
             pointers.extend(value.trace());
         }
@@ -299,7 +315,10 @@ impl Trace for StandardObject {
 
 impl HostObject for StandardObject {
     /// [[GetOwnProperty]], Section 8.12.1
-    fn get_own_property(&mut self, _: &mut ExecutionEngine, name: InternedString) -> Option<Property> {
+    fn get_own_property(&mut self,
+                        _: &mut ExecutionEngine,
+                        name: InternedString)
+                        -> Option<Property> {
         self.backing_storage.get(&name).cloned()
     }
 
@@ -334,7 +353,7 @@ impl HostObject for StandardObject {
         if let Some(desc) = self.get_property(ee, property_name) {
             if desc.is_data_descriptor() {
                 let value = desc.unwrap_value();
-                return Ok(ee.heap_mut().root_value(value))
+                return Ok(ee.heap_mut().root_value(value));
             }
 
             debug_assert!(desc.is_accessor_descriptor());
@@ -363,7 +382,7 @@ impl HostObject for StandardObject {
         }
 
         if self.prototype.is_null() {
-            return self.is_extensible(ee)
+            return self.is_extensible(ee);
         }
 
         if let Some(inherited_prop) = self.get_property(ee, property_name) {
@@ -383,7 +402,12 @@ impl HostObject for StandardObject {
         return self.is_extensible(ee);
     }
 
-    fn put(&mut self, ee: &mut ExecutionEngine, property_name: InternedString, value: &RootedValue, should_throw: bool) -> EvalResult<()> {
+    fn put(&mut self,
+           ee: &mut ExecutionEngine,
+           property_name: InternedString,
+           value: &RootedValue,
+           should_throw: bool)
+           -> EvalResult<()> {
         if !self.can_put(ee, property_name) {
             if should_throw {
                 return ee.throw_type_error("can't assign to this property");
@@ -393,21 +417,21 @@ impl HostObject for StandardObject {
         }
 
         let own_desc = self.get_own_property(ee, property_name)
-            .expect("get_own_property returned None despite can_put being true");
+                           .expect("get_own_property returned None despite can_put being true");
         if own_desc.is_data_descriptor() {
             let value_desc = Property::Named {
                 value: Some(value.clone().into_inner()),
                 writable: None,
                 enumerable: None,
-                configurable: None
+                configurable: None,
             };
 
             self.define_own_property(ee, property_name, value_desc, should_throw);
-            return Ok(())
+            return Ok(());
         }
 
         let desc = self.get_property(ee, property_name)
-            .expect("get_property returned None despite can_put being true");
+                       .expect("get_property returned None despite can_put being true");
         if desc.is_accessor_descriptor() {
             let set = desc.unwrap_set();
             debug_assert!(set.is_undefined());
@@ -419,18 +443,22 @@ impl HostObject for StandardObject {
             value: Some(value.clone().into_inner()),
             writable: Some(true),
             enumerable: Some(true),
-            configurable: Some(true)
+            configurable: Some(true),
         };
 
         self.define_own_property(ee, property_name, new_prop, should_throw);
-        return Ok(())
+        return Ok(());
     }
 
     fn has_property(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool {
         self.get_property(ee, property_name).is_some()
     }
 
-    fn delete(&mut self, ee: &mut ExecutionEngine, property_name: InternedString, should_throw: bool) -> EvalResult<bool> {
+    fn delete(&mut self,
+              ee: &mut ExecutionEngine,
+              property_name: InternedString,
+              should_throw: bool)
+              -> EvalResult<bool> {
         if let Some(desc) = self.get_property(ee, property_name) {
             if desc.unwrap_configurable() {
                 self.backing_storage.remove(&property_name);
@@ -451,7 +479,12 @@ impl HostObject for StandardObject {
         unimplemented!()
     }
 
-    fn define_own_property(&mut self, ee: &mut ExecutionEngine, name: InternedString, prop: Property, should_throw: bool) -> bool {
+    fn define_own_property(&mut self,
+                           ee: &mut ExecutionEngine,
+                           name: InternedString,
+                           prop: Property,
+                           should_throw: bool)
+                           -> bool {
         unimplemented!()
     }
 
@@ -470,7 +503,10 @@ pub trait HostObject : Trace {
     fn class(&mut self, ee: &mut ExecutionEngine) -> &'static str;
     fn is_extensible(&mut self, ee: &mut ExecutionEngine) -> bool;
     fn get(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> EvalValue;
-    fn get_own_property(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> Option<Property>;
+    fn get_own_property(&mut self,
+                        ee: &mut ExecutionEngine,
+                        property_name: InternedString)
+                        -> Option<Property>;
     fn get_property(&mut self, ee: &mut ExecutionEngine, name: InternedString) -> Option<Property>;
     fn put(&mut self,
            ee: &mut ExecutionEngine,
@@ -480,7 +516,11 @@ pub trait HostObject : Trace {
            -> EvalResult<()>;
     fn can_put(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool;
     fn has_property(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool;
-    fn delete(&mut self, ee: &mut ExecutionEngine, property_name: InternedString, should_throw: bool) -> EvalResult<bool>;
+    fn delete(&mut self,
+              ee: &mut ExecutionEngine,
+              property_name: InternedString,
+              should_throw: bool)
+              -> EvalResult<bool>;
     fn default_value(&mut self, ee: &mut ExecutionEngine, hint: &RootedValue) -> RootedValue;
     fn define_own_property(&mut self,
                            ee: &mut ExecutionEngine,

@@ -37,9 +37,7 @@ fn main() {
     }
 }
 
-fn parse_and_print(data: &str,
-                   stdout: &mut StdoutLock,
-                   interner: &mut compiler::StringInterner) {
+fn parse_and_print(data: &str, stdout: &mut StdoutLock, interner: &mut compiler::StringInterner) {
     let lexer = Lexer::new(data.chars());
     let mut parser = Parser::new(lexer);
     let ast = match parser.parse_statement() {

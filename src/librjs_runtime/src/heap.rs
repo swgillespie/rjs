@@ -183,7 +183,7 @@ pub enum HeapObject {
     Boolean(BooleanPtr),
     String(StringPtr),
     Object(ObjectPtr),
-    Activation(ActivationPtr)
+    Activation(ActivationPtr),
 }
 
 impl HeapObject {
@@ -194,7 +194,7 @@ impl HeapObject {
             HeapObject::Object(ref mut ptr) => ptr.mark(),
             HeapObject::Boolean(ref mut ptr) => ptr.mark(),
             HeapObject::Number(ref mut ptr) => ptr.mark(),
-            HeapObject::Activation(ref mut ptr) => ptr.mark()
+            HeapObject::Activation(ref mut ptr) => ptr.mark(),
         }
     }
 
@@ -218,7 +218,7 @@ impl Trace for HeapObject {
             HeapObject::Number(_) => vec![].into_iter(),
             HeapObject::Boolean(_) => vec![].into_iter(),
             HeapObject::Object(obj) => obj.borrow().trace(),
-            HeapObject::Activation(act) => act.borrow().trace()
+            HeapObject::Activation(act) => act.borrow().trace(),
         }
     }
 }

@@ -79,7 +79,7 @@ pub enum Value {
     String(heap::StringPtr),
     StringObject(heap::StringPtr),
     // objects
-    Object(heap::ObjectPtr)
+    Object(heap::ObjectPtr),
 }
 
 impl ToHeapObject for Value {
@@ -89,7 +89,7 @@ impl ToHeapObject for Value {
             Value::Number(ptr) | Value::NumberObject(ptr) => ptr.to_heap_object(),
             Value::Boolean(ptr) | Value::BooleanObject(ptr) => ptr.to_heap_object(),
             Value::String(ptr) | Value::StringObject(ptr) => ptr.to_heap_object(),
-            Value::Object(ptr) => ptr.to_heap_object()
+            Value::Object(ptr) => ptr.to_heap_object(),
         }
     }
 }

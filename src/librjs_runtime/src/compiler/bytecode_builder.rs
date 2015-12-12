@@ -25,13 +25,11 @@ impl BytecodeBuilder {
             is_strict: false,
             should_produce_result: false,
             functions: vec![],
-            function_index: Cell::new(0)
+            function_index: Cell::new(0),
         }
     }
 
-    pub fn lower_program(mut self,
-                         program: &hir::Program)
-                         -> CompiledProgram {
+    pub fn lower_program(mut self, program: &hir::Program) -> CompiledProgram {
         let mut global_emitter = GlobalEmitter::new();
         self.is_strict = program.is_strict();
 
@@ -327,7 +325,9 @@ impl BytecodeBuilder {
             hir::Expression::Logical(op, ref left, ref right) => {
                 self.lower_logical_op(emitter, op, left, right)
             }
-            hir::Expression::New(ref base, ref args) => self.lower_new_expression(emitter, base, args),
+            hir::Expression::New(ref base, ref args) => {
+                self.lower_new_expression(emitter, base, args)
+            }
             hir::Expression::Sequence(ref seq, ref expr) => self.lower_sequence(emitter, seq, expr),
             hir::Expression::Identifier(ident) => self.lower_identifier(emitter, ident),
             hir::Expression::Literal(ref lit) => self.lower_literal(emitter, lit),
@@ -363,7 +363,7 @@ impl BytecodeBuilder {
             match prop.kind {
                 hir::PropertyKind::Init => emitter.emit_init_property(name),
                 hir::PropertyKind::Get => emitter.emit_init_property_getter(name),
-                hir::PropertyKind::Set => emitter.emit_init_property_setter(name)
+                hir::PropertyKind::Set => emitter.emit_init_property_setter(name),
             }
 
             // obj is back on the stack

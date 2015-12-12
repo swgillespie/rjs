@@ -29,7 +29,7 @@ use super::{Value, RootedValue};
 pub struct Activation {
     /// Each activation has some backing representation depending on what type of
     /// activation it is.
-    backing_repr: ActivationKind
+    backing_repr: ActivationKind,
 }
 
 impl Trace for Activation {
@@ -37,31 +37,27 @@ impl Trace for Activation {
         match self.backing_repr {
             ActivationKind::Function(ref act) => act.trace(),
             ActivationKind::With(ref act) => act.trace(),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 }
 
 impl Default for Activation {
     fn default() -> Activation {
-        Activation {
-            backing_repr: ActivationKind::DefaultSentinel
-        }
+        Activation { backing_repr: ActivationKind::DefaultSentinel }
     }
 }
 
 impl Activation {
     pub fn new_function_activation(parent: ActivationPtr, this: RootedValue) -> Activation {
-        Activation {
-            backing_repr: ActivationKind::Function(FunctionActivation::new(parent, this))
-        }
+        Activation { backing_repr: ActivationKind::Function(FunctionActivation::new(parent, this)) }
     }
 
     pub fn has_binding(&self, ident: InternedString) -> bool {
         match self.backing_repr {
             ActivationKind::Function(ref act) => act.has_binding(ident),
             ActivationKind::With(ref act) => act.has_binding(ident),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
@@ -69,7 +65,7 @@ impl Activation {
         match self.backing_repr {
             ActivationKind::Function(ref mut act) => act.create_mutable_binding(ident, deletable),
             ActivationKind::With(ref mut act) => act.create_mutable_binding(ident, deletable),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
@@ -77,7 +73,7 @@ impl Activation {
         match self.backing_repr {
             ActivationKind::Function(ref mut act) => act.set_mutable_binding(ident, value),
             ActivationKind::With(ref mut act) => act.set_mutable_binding(ident, value),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
@@ -85,7 +81,7 @@ impl Activation {
         match self.backing_repr {
             ActivationKind::Function(ref act) => act.get_binding_value(ident),
             ActivationKind::With(ref act) => act.get_binding_value(ident),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
@@ -93,7 +89,7 @@ impl Activation {
         match self.backing_repr {
             ActivationKind::Function(ref mut act) => act.delete_binding(ident),
             ActivationKind::With(ref mut act) => act.delete_binding(ident),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
@@ -101,7 +97,7 @@ impl Activation {
         match self.backing_repr {
             ActivationKind::Function(ref act) => act.implicit_this_value(),
             ActivationKind::With(ref act) => act.implicit_this_value(),
-            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel()
+            ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
@@ -124,14 +120,14 @@ pub enum GetBindingResult {
 enum ActivationKind {
     Function(FunctionActivation),
     With(WithActivation),
-    DefaultSentinel
+    DefaultSentinel,
 }
 
 struct ActivationEntry {
     deletable: bool,
     mutable: bool,
     has_been_initialized: bool,
-    value: Value
+    value: Value,
 }
 
 impl ActivationEntry {
@@ -140,7 +136,7 @@ impl ActivationEntry {
             deletable: deletable,
             mutable: mutable,
             has_been_initialized: false,
-            value: Value::undefined()
+            value: Value::undefined(),
         }
     }
 
@@ -176,7 +172,7 @@ impl ActivationEntry {
 struct FunctionActivation {
     parent: Option<ActivationPtr>,
     this: Value,
-    map: HashMap<InternedString, ActivationEntry>
+    map: HashMap<InternedString, ActivationEntry>,
 }
 
 impl Trace for FunctionActivation {
@@ -207,7 +203,7 @@ impl FunctionActivation {
         FunctionActivation {
             parent: Some(parent),
             this: this.into_inner(),
-            map: HashMap::new()
+            map: HashMap::new(),
         }
     }
 
@@ -240,7 +236,7 @@ impl FunctionActivation {
 
                 entry.get_mut().set_value(value.clone().into_inner());
                 true
-            },
+            }
             Entry::Vacant(_) => {
                 panic!("set_mutable_binding called on unbound identifier");
             }
@@ -275,8 +271,8 @@ impl FunctionActivation {
 
                 entry.remove();
                 return true;
-            },
-            Entry::Vacant(_) => return true
+            }
+            Entry::Vacant(_) => return true,
         }
     }
 
@@ -293,8 +289,9 @@ impl FunctionActivation {
     }
 
     pub fn initialize_immutable_binding(&mut self, ident: InternedString, value: &RootedValue) {
-        let binding = self.map.get_mut(&ident)
-            .expect("initialize_immutable_binding called on unbound identifier");
+        let binding = self.map
+                          .get_mut(&ident)
+                          .expect("initialize_immutable_binding called on unbound identifier");
         debug_assert!(!binding.is_mutable() && !binding.has_been_initialized());
         binding.set_value(value.clone().into_inner());
         binding.mark_as_initialized();
@@ -306,7 +303,7 @@ impl FunctionActivation {
 struct WithActivation {
     parent: Option<ActivationPtr>,
     this: Value,
-    object: Value
+    object: Value,
 }
 
 impl Trace for WithActivation {

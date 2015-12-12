@@ -346,7 +346,10 @@ impl GlobalEmitter {
         }
     }
 
-    pub fn bake(mut self, functions: Vec<CompiledFunction>, interner: StringInterner) -> CompiledProgram {
+    pub fn bake(mut self,
+                functions: Vec<CompiledFunction>,
+                interner: StringInterner)
+                -> CompiledProgram {
         fixup_labels(&mut self.global_opcodes, &self.label_table);
         CompiledProgram {
             strings: interner,

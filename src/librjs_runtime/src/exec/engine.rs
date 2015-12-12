@@ -3,7 +3,7 @@
 
 use heap::Heap;
 use values::EvalResult;
-//use values::{RootedValue, EvalValue};
+// use values::{RootedValue, EvalValue};
 use std::path::Path;
 use std::convert::AsRef;
 
@@ -13,9 +13,7 @@ pub struct ExecutionEngine {
 
 impl ExecutionEngine {
     pub fn new() -> ExecutionEngine {
-        ExecutionEngine {
-            heap: Heap::new()
-        }
+        ExecutionEngine { heap: Heap::new() }
     }
 
     pub fn eval_file<P: AsRef<Path>>(&mut self, file: P) {

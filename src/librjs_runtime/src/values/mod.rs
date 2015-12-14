@@ -53,6 +53,7 @@
 
 mod object;
 mod activation;
+mod property;
 
 use super::heap::{self, RootedPtr, ToHeapObject, HeapObject, Trace};
 use std::vec::IntoIter;
@@ -172,6 +173,7 @@ impl Value {
     }
 
     pub fn same_value(&self, other: Value) -> bool {
+        // TODO
         unimplemented!()
     }
 }

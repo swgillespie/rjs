@@ -21,7 +21,8 @@ use std::vec::IntoIter;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use super::{Value, RootedValue};
-use values::object::{HostObject, Property};
+use values::object::HostObject;
+use values::property::Property;
 use exec::engine::ExecutionEngine;
 
 /// An activation represents a lexical environment at runtime. It maintains a mapping

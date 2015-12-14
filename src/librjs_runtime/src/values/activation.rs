@@ -21,6 +21,8 @@ use std::vec::IntoIter;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use super::{Value, RootedValue};
+use values::object::{HostObject, Property};
+use exec::engine::ExecutionEngine;
 
 /// An activation represents a lexical environment at runtime. It maintains a mapping
 /// of identifier names to runtime values and is queried by the interpreter to resolve
@@ -53,18 +55,21 @@ impl Activation {
         Activation { backing_repr: ActivationKind::Function(FunctionActivation::new(parent, this)) }
     }
 
-    pub fn has_binding(&self, ident: InternedString) -> bool {
+    pub fn has_binding(&self, ee: &mut ExecutionEngine, ident: InternedString) -> bool {
         match self.backing_repr {
-            ActivationKind::Function(ref act) => act.has_binding(ident),
-            ActivationKind::With(ref act) => act.has_binding(ident),
+            ActivationKind::Function(ref act) => act.has_binding(ee, ident),
+            ActivationKind::With(ref act) => act.has_binding(ee, ident),
             ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
 
-    pub fn create_mutable_binding(&mut self, ident: InternedString, deletable: bool) {
+    pub fn create_mutable_binding(&mut self,
+                                  ee: &mut ExecutionEngine,
+                                  ident: InternedString,
+                                  deletable: bool) {
         match self.backing_repr {
             ActivationKind::Function(ref mut act) => act.create_mutable_binding(ident, deletable),
-            ActivationKind::With(ref mut act) => act.create_mutable_binding(ident, deletable),
+            ActivationKind::With(ref mut act) => act.create_mutable_binding(ee, ident, deletable),
             ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
@@ -207,7 +212,7 @@ impl FunctionActivation {
         }
     }
 
-    pub fn has_binding(&self, ident: InternedString) -> bool {
+    pub fn has_binding(&self, ee: &mut ExecutionEngine, ident: InternedString) -> bool {
         if self.map.contains_key(&ident) {
             return true;
         }
@@ -215,7 +220,7 @@ impl FunctionActivation {
         if let Some(activation) = self.parent {
             // an invariant of the activation tree is that there are no cycles,
             // so no one activation will be borrowed more than once.
-            activation.borrow().has_binding(ident)
+            activation.borrow().has_binding(ee, ident)
         } else {
             false
         }
@@ -328,11 +333,14 @@ impl Trace for WithActivation {
 }
 
 impl WithActivation {
-    pub fn has_binding(&self, ident: InternedString) -> bool {
+    pub fn has_binding(&self, ee: &mut ExecutionEngine, ident: InternedString) -> bool {
         unimplemented!()
     }
 
-    pub fn create_mutable_binding(&mut self, ident: InternedString, deletable: bool) {
+    pub fn create_mutable_binding(&mut self,
+                                  ee: &mut ExecutionEngine,
+                                  ident: InternedString,
+                                  deletable: bool) {
         unimplemented!()
     }
 

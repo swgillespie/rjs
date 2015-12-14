@@ -170,6 +170,10 @@ impl Value {
 
         panic!("unwrap_object called on non-object value");
     }
+
+    pub fn same_value(&self, other: Value) -> bool {
+        unimplemented!()
+    }
 }
 
 pub struct Exception;

@@ -14,6 +14,16 @@ use std::vec::IntoIter;
 use std::default::Default;
 use std::collections::HashMap;
 
+macro_rules! reject {
+    ($ee:ident, $should_throw:ident) => {
+        if $should_throw {
+            return $ee.throw_type_error("invalid call to define own property")
+        } else {
+            return Ok(false)
+        }
+    }
+}
+
 pub enum Object {
     Standard(StandardObject),
     HostObject(Box<HostObject>),
@@ -140,7 +150,7 @@ impl HostObject for Object {
                            property_name: InternedString,
                            property: Property,
                            should_throw: bool)
-                           -> bool {
+                           -> EvalResult<bool> {
         match *self {
             Object::Standard(ref mut stdobj) => {
                 stdobj.define_own_property(ee, property_name, property, should_throw)
@@ -198,6 +208,24 @@ impl Trace for Property {
 }
 
 impl Property {
+    fn new_accesor_descriptor(enumerable: bool, configurable: bool) -> Property {
+        Property::Accessor {
+            get: Some(Value::undefined()),
+            set: Some(Value::undefined()),
+            enumerable: Some(enumerable),
+            configurable: Some(configurable),
+        }
+    }
+
+    fn new_data_descriptor(enumerable: bool, configurable: bool) -> Property {
+        Property::Named {
+            value: Some(Value::undefined()),
+            writable: Some(false),
+            enumerable: Some(enumerable),
+            configurable: Some(configurable),
+        }
+    }
+
     /// IsAccessorDescriptor, section 8.10.1
     fn is_accessor_descriptor(&self) -> bool {
         if let Property::Accessor { get, set, .. } = *self {
@@ -252,6 +280,14 @@ impl Property {
         panic!("unwrap_value called on invalid property");
     }
 
+    fn try_get_value(&self) -> Option<Value> {
+        if let Property::Named { value, .. } = *self {
+            return value;
+        }
+
+        None
+    }
+
     fn unwrap_get(&self) -> Value {
         if let Property::Accessor { get, .. } = *self {
             if let Some(actual_get) = get {
@@ -260,6 +296,14 @@ impl Property {
         }
 
         panic!("unwrap_get called on invalid property");
+    }
+
+    fn try_get_get(&self) -> Option<Value> {
+        if let Property::Accessor { get, .. } = *self {
+            return get;
+        }
+
+        None
     }
 
     fn unwrap_set(&self) -> Value {
@@ -272,6 +316,14 @@ impl Property {
         panic!("unwrap_set called on invalid property");
     }
 
+    fn try_get_set(&self) -> Option<Value> {
+        if let Property::Accessor { set, .. } = *self {
+            return set;
+        }
+
+        None
+    }
+
     fn unwrap_writable(&self) -> bool {
         if let Property::Named { writable, .. } = *self {
             if let Some(actual_writable) = writable {
@@ -280,6 +332,14 @@ impl Property {
         }
 
         panic!("unwrap_writable called on invalid property");
+    }
+
+    fn try_get_writable(&self) -> Option<bool> {
+        if let Property::Named { writable, .. } = *self {
+            return writable;
+        }
+
+        return None;
     }
 
     fn unwrap_configurable(&self) -> bool {
@@ -293,6 +353,26 @@ impl Property {
         }
 
         panic!("unwrap_configurable called on invalid property");
+    }
+
+    fn unwrap_enumerable(&self) -> bool {
+        let enumerable = match *self {
+            Property::Named { enumerable, .. } => enumerable,
+            Property::Accessor { enumerable, .. } => enumerable,
+        };
+
+        if let Some(actual_enumerable) = enumerable {
+            return actual_enumerable;
+        }
+
+        panic!("unwrap_enumerable called on invalid property");
+    }
+
+    fn try_get_enumerable(&self) -> Option<bool> {
+        match *self {
+            Property::Named { enumerable, .. } => enumerable,
+            Property::Accessor { enumerable, .. } => enumerable,
+        }
     }
 }
 
@@ -479,13 +559,111 @@ impl HostObject for StandardObject {
         unimplemented!()
     }
 
+    /// [[DefineOwnProperty]], section 8.12.9
     fn define_own_property(&mut self,
                            ee: &mut ExecutionEngine,
                            name: InternedString,
                            prop: Property,
                            should_throw: bool)
-                           -> bool {
-        unimplemented!()
+                           -> EvalResult<bool> {
+        if let Some(current) = self.get_own_property(ee, name) {
+            // if all properties are abstent on the prop, return true.
+            match prop {
+                Property::Named {
+                    value: None,
+                    writable: None,
+                    enumerable: None,
+                    configurable: None
+                } |
+                Property::Accessor {
+                    get: None,
+                    set: None,
+                    enumerable: None,
+                    configurable: None } => return Ok(true),
+                _ => {}
+            }
+
+            // if all properties in the current property are identical to
+            // the provided property, return true.
+            // TODO this is not a cheap check - need to see if we can move this
+            // to a colder code path while still maintaining correctness.
+            if property_is_same(current, prop) {
+                return Ok(true);
+            }
+
+            if !current.unwrap_configurable() {
+                if prop.unwrap_configurable() {
+                    reject!(ee, should_throw)
+                }
+
+                if let Some(prop_enumerable) = prop.try_get_enumerable() {
+                    if current.unwrap_enumerable() != prop_enumerable {
+                        reject!(ee, should_throw)
+                    }
+                }
+            }
+
+            if current.is_data_descriptor() != prop.is_data_descriptor() {
+                if !current.unwrap_configurable() {
+                    reject!(ee, should_throw);
+                }
+
+                if current.is_data_descriptor() {
+                    let new_prop = Property::new_accesor_descriptor(current.unwrap_enumerable(),
+                                                                    current.unwrap_configurable());
+                    self.backing_storage.insert(name, new_prop);
+                    return Ok(true);
+                } else {
+                    debug_assert!(current.is_accessor_descriptor());
+                    let new_prop = Property::new_data_descriptor(current.unwrap_enumerable(),
+                                                                 current.unwrap_configurable());
+                    self.backing_storage.insert(name, new_prop);
+                    return Ok(true);
+                }
+            }
+
+            if current.is_data_descriptor() && prop.is_data_descriptor() {
+                if !current.unwrap_configurable() {
+                    if let Some(prop_writable) = prop.try_get_writable() {
+                        if !current.unwrap_writable() && prop_writable {
+                            reject!(ee, should_throw);
+                        }
+
+                        if !current.unwrap_writable() {
+                            if let Some(prop_value) = prop.try_get_value() {
+                                if !current.unwrap_value().same_value(prop_value) {
+                                    reject!(ee, should_throw);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                debug_assert!(current.is_accessor_descriptor());
+                debug_assert!(prop.is_accessor_descriptor());
+                if !current.unwrap_configurable() {
+                    if let Some(prop_set) = prop.try_get_set() {
+                        if !current.unwrap_value().same_value(prop_set) {
+                            reject!(ee, should_throw);
+                        }
+                    }
+
+                    if let Some(prop_get) = prop.try_get_get() {
+                        if !current.unwrap_value().same_value(prop_get) {
+                            reject!(ee, should_throw);
+                        }
+                    }
+                }
+            }
+        } else {
+            if !self.is_extensible(ee) {
+                reject!(ee, should_throw);
+            }
+        }
+
+        // TODO populate default values?
+        self.backing_storage.insert(name, prop);
+        return Ok(true);
     }
 
     fn get_prototype(&mut self, ee: &mut ExecutionEngine) -> RootedValue {
@@ -495,6 +673,38 @@ impl HostObject for StandardObject {
     fn set_prototype(&mut self, _: &mut ExecutionEngine, value: &RootedValue) {
         self.prototype = value.clone().into_inner();
     }
+}
+
+/// This is some seriously bad Rust that does the property sameness check as mandated by
+/// the spec. It's not clear whether or not this is necessary and hopefully I can remove this
+/// at some point.
+fn property_is_same(current: Property, prop: Property) -> bool {
+    match (current, prop) {
+        (Property::Named { value: current_value, writable: current_writable, enumerable: current_enumerable, configurable: current_configurable },
+         Property::Named { value: prop_value, writable: prop_writable, enumerable: prop_enumerable, configurable: prop_configurable }) => {
+             if let Some(actual_current_value) = current_value {
+                 if let Some(actual_prop_value) = prop_value {
+                     if actual_current_value.same_value(actual_prop_value) && current_writable == prop_writable && current_enumerable == prop_enumerable && current_configurable == prop_configurable {
+                         return true;
+                     }
+                 }
+             }
+         }
+        (Property::Accessor { get: current_get, set: current_set, enumerable: current_enumerable, configurable: current_configurable },
+          Property::Accessor { get: prop_get, set: prop_set, enumerable: prop_enumerable, configurable: prop_configurable }) => {
+              match (current_get, current_set, prop_get, prop_set) {
+                  (Some(c_get), Some(c_set), Some(p_get), Some(p_set)) => {
+                      if c_get.same_value(p_get) && c_set.same_value(p_set) && current_enumerable == prop_enumerable && current_configurable == prop_configurable {
+                          return true;
+                      }
+                  },
+                  _ => {}
+              }
+         }
+        _ => {}
+    }
+
+    return false;
 }
 
 pub trait HostObject : Trace {
@@ -527,5 +737,5 @@ pub trait HostObject : Trace {
                            property_name: InternedString,
                            property: Property,
                            should_throw: bool)
-                           -> bool;
+                           -> EvalResult<bool>;
 }

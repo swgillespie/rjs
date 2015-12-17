@@ -59,10 +59,10 @@ impl Property {
         }
     }
 
-    pub fn new_data_descriptor(enumerable: bool, configurable: bool) -> Property {
+    pub fn new_data_descriptor(writable: bool, enumerable: bool, configurable: bool) -> Property {
         Property::Named {
             value: Some(Value::undefined()),
-            writable: Some(false),
+            writable: Some(writable),
             enumerable: Some(enumerable),
             configurable: Some(configurable),
         }

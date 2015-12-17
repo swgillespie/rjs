@@ -294,8 +294,8 @@ impl HostObject for StandardObject {
                 configurable: None,
             };
 
-            self.define_own_property(ee, property_name, value_desc, should_throw);
-            return Ok(());
+            return self.define_own_property(ee, property_name, value_desc, should_throw)
+                       .map(|_| ());
         }
 
         let desc = self.get_property(ee, property_name)
@@ -405,7 +405,9 @@ impl HostObject for StandardObject {
                     return Ok(true);
                 } else {
                     debug_assert!(current.is_accessor_descriptor());
-                    let new_prop = Property::new_data_descriptor(current.unwrap_enumerable(),
+                    // SPEC_NOTE: is this new property writable? default to yes.
+                    let new_prop = Property::new_data_descriptor(true,
+                                                                 current.unwrap_enumerable(),
                                                                  current.unwrap_configurable());
                     self.backing_storage.insert(name, new_prop);
                     return Ok(true);
@@ -528,4 +530,16 @@ pub trait HostObject : Trace {
                            property: Property,
                            should_throw: bool)
                            -> EvalResult<bool>;
+
+    fn call(&mut self, ee: &mut ExecutionEngine, _: Vec<RootedValue>) -> EvalValue {
+        ee.throw_type_error("value is not callable")
+    }
+
+    fn construct(&mut self, ee: &mut ExecutionEngine, _: Vec<RootedValue>) -> EvalValue {
+        ee.throw_type_error("value is not constructable")
+    }
+
+    fn primitive_value(&mut self, ee: &mut ExecutionEngine) -> EvalValue {
+        ee.throw_type_error("value does not have primitive value")
+    }
 }

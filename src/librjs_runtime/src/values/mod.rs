@@ -54,6 +54,7 @@
 mod object;
 mod activation;
 mod property;
+mod array;
 
 use super::heap::{self, RootedPtr, ToHeapObject, HeapObject, Trace};
 use std::vec::IntoIter;

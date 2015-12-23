@@ -30,15 +30,23 @@ pub struct CompiledProgram {
 }
 
 impl CompiledProgram {
-    pub fn interner<'a>(&'a self) -> &'a StringInterner {
+    pub fn interner(&self) -> &StringInterner {
         &self.strings
     }
 
-    pub fn functions<'a>(&'a self) -> &'a [CompiledFunction] {
+    pub fn interner_mut(&mut self) -> &mut StringInterner {
+        &mut self.strings
+    }
+
+    pub fn functions(&self) -> &[CompiledFunction] {
         &self.functions
     }
 
-    pub fn global_function<'a>(&'a self) -> &'a [Opcode] {
+    pub fn function_index(&self, index: usize) -> &CompiledFunction {
+        &self.functions[index]
+    }
+
+    pub fn global_function(&self) -> &[Opcode] {
         &self.global_function
     }
 }
@@ -61,6 +69,11 @@ impl CompiledFunction {
 
     pub fn code<'a>(&'a self) -> &'a [Opcode] {
         &self.code
+    }
+
+    pub fn is_strict(&self) -> bool {
+        // TODO
+        unimplemented!()
     }
 }
 

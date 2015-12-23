@@ -51,17 +51,17 @@
 //! * An **internal property**, which isn't exposed to ECMAScript and
 //!   is used for specification and implementation purposes.
 
-mod object;
-mod activation;
-mod property;
-mod array;
+pub mod object;
+pub mod activation;
+pub mod property;
+pub mod function;
 
 use super::heap::{self, RootedPtr, ToHeapObject, HeapObject, Trace};
 use std::vec::IntoIter;
 use std::default::Default;
 
-pub use self::object::Object;
-pub use self::activation::Activation;
+//pub use self::object::Object;
+//pub use self::activation::Activation;
 
 pub type RootedValue = RootedPtr<Value>;
 
@@ -73,13 +73,10 @@ pub enum Value {
     Null,
     // numbers
     Number(heap::NumberPtr),
-    NumberObject(heap::NumberPtr),
     // booleans
     Boolean(heap::BooleanPtr),
-    BooleanObject(heap::BooleanPtr),
     // strings
     String(heap::StringPtr),
-    StringObject(heap::StringPtr),
     // objects
     Object(heap::ObjectPtr),
 }
@@ -88,9 +85,9 @@ impl ToHeapObject for Value {
     fn to_heap_object(&self) -> Option<HeapObject> {
         match *self {
             Value::Null | Value::Undefined => None,
-            Value::Number(ptr) | Value::NumberObject(ptr) => ptr.to_heap_object(),
-            Value::Boolean(ptr) | Value::BooleanObject(ptr) => ptr.to_heap_object(),
-            Value::String(ptr) | Value::StringObject(ptr) => ptr.to_heap_object(),
+            Value::Number(ptr) => ptr.to_heap_object(),
+            Value::Boolean(ptr) => ptr.to_heap_object(),
+            Value::String(ptr) => ptr.to_heap_object(),
             Value::Object(ptr) => ptr.to_heap_object(),
         }
     }
@@ -125,24 +122,12 @@ impl Value {
         Value::Number(ptr)
     }
 
-    pub fn number_object(ptr: heap::NumberPtr) -> Value {
-        Value::NumberObject(ptr)
-    }
-
     pub fn boolean(ptr: heap::BooleanPtr) -> Value {
         Value::Boolean(ptr)
     }
 
-    pub fn boolean_object(ptr: heap::BooleanPtr) -> Value {
-        Value::BooleanObject(ptr)
-    }
-
     pub fn string(ptr: heap::StringPtr) -> Value {
         Value::String(ptr)
-    }
-
-    pub fn string_object(ptr: heap::StringPtr) -> Value {
-        Value::StringObject(ptr)
     }
 
     pub fn object(ptr: heap::ObjectPtr) -> Value {
@@ -165,6 +150,22 @@ impl Value {
         }
     }
 
+    pub fn is_string(&self) -> bool {
+        if let Value::String(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn is_object(&self) -> bool {
+        if let Value::Object(_) = *self {
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn unwrap_object(&self) -> heap::ObjectPtr {
         if let Value::Object(ptr) = *self {
             return ptr;
@@ -173,11 +174,31 @@ impl Value {
         panic!("unwrap_object called on non-object value");
     }
 
-    pub fn same_value(&self, other: Value) -> bool {
+    pub fn same_value(&self, _: Value) -> bool {
         // TODO
         unimplemented!()
     }
 }
+
+pub trait IntoRootedValue {
+    fn into_rooted_value(self, heap: &mut heap::Heap) -> RootedValue;
+}
+
+macro_rules! into_rooted_value_impl {
+    ($rooted_ty:ty, $name:path) => {
+        impl IntoRootedValue for $rooted_ty {
+            fn into_rooted_value(self, heap: &mut heap::Heap) -> RootedValue {
+                let ptr = self.into_inner();
+                heap.root_value($name(ptr))
+            }
+        }
+    }
+}
+
+into_rooted_value_impl!(heap::RootedBooleanPtr, Value::Boolean);
+into_rooted_value_impl!(heap::RootedNumberPtr, Value::Number);
+into_rooted_value_impl!(heap::RootedObjectPtr, Value::Object);
+into_rooted_value_impl!(heap::RootedStringPtr, Value::String);
 
 pub struct Exception;
 pub type EvalResult<T> = Result<T, Exception>;

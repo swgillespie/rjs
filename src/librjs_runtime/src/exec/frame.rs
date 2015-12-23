@@ -2,27 +2,20 @@
 //! The list of frames maintained by the ExecutionEngine forms the "stack".
 
 use heap::RootedActivationPtr;
-use values::{Value, RootedValue, EvalValue};
-use exec::engine::ExecutionEngine;
+use compiler::CompiledFunction;
+
+use std::rc::Rc;
 
 pub struct Frame {
-    activation: RootedActivationPtr,
-    code_object: RootedValue,
-    interpreter_stack: Vec<Value>,
-    instruction_pointer: usize,
+    pub activation: RootedActivationPtr,
+    pub code_object: Rc<CompiledFunction>,
 }
 
 impl Frame {
-    pub fn new(activation: RootedActivationPtr, code_object: RootedValue) -> Frame {
+    pub fn new(activation: RootedActivationPtr, code_object: CompiledFunction) -> Frame {
         Frame {
             activation: activation,
-            code_object: code_object,
-            interpreter_stack: vec![],
-            instruction_pointer: 0,
+            code_object: Rc::new(code_object),
         }
-    }
-
-    pub fn execute(&mut self, ee: &mut ExecutionEngine) -> EvalValue {
-        unimplemented!()
     }
 }

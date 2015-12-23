@@ -25,7 +25,7 @@ use values::object::HostObject;
 use values::property::Property;
 use values::{EvalResult, EvalValue};
 use exec::engine::ExecutionEngine;
-use heap::{RootedActivationPtr, RootedPtr};
+use heap::RootedActivationPtr;
 
 /// An activation represents a lexical environment at runtime. It maintains a mapping
 /// of identifier names to runtime values and is queried by the interpreter to resolve
@@ -272,7 +272,7 @@ impl FunctionActivation {
     }
 
     pub fn create_mutable_binding(&mut self,
-                                  ee: &mut ExecutionEngine,
+                                  _: &mut ExecutionEngine,
                                   ident: InternedString,
                                   deletable: bool)
                                   -> EvalResult<()> {
@@ -336,7 +336,7 @@ impl FunctionActivation {
     }
 
     pub fn delete_binding(&mut self,
-                          ee: &mut ExecutionEngine,
+                          _: &mut ExecutionEngine,
                           ident: InternedString)
                           -> EvalResult<bool> {
         match self.map.entry(ident) {

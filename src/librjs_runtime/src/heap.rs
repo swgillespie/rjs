@@ -107,7 +107,8 @@ use std::default::Default;
 use std::cell::RefCell;
 use std::mem;
 
-use values::{Object, Activation};
+use values::object::Object;
+use values::activation::Activation;
 
 macro_rules! allocate {
     ($name:ident, $output:ty, $arena_name:ident) => {

@@ -9,6 +9,7 @@ mod bytecode_builder;
 
 pub use self::emitter::{CompiledFunction, CompiledProgram};
 pub use self::string_interer::{InternedString, StringInterner};
+pub use self::bytecode::Opcode;
 
 use librjs_syntax::ast::{Program, SpannedStatement};
 

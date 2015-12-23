@@ -105,7 +105,7 @@ impl Property {
     }
 
     /// ToPropertyDescriptor, section 8.10.5
-    pub fn to_property_descriptor(object: Object) {
+    pub fn to_property_descriptor(_: Object) {
         unimplemented!()
     }
 

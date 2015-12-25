@@ -415,8 +415,8 @@ impl Heap {
     /// goes. At the end of the mark phase, all marked pointers are live
     /// and all unmarked pointers are dead.
     fn mark_phase(&mut self) {
-        debug!(target: "gc", "begin mark phase");
-        debug!(target: "gc", "there are {} roots", self.rooted_set.len());
+        info!(target: "gc", "begin mark phase");
+        info!(target: "gc", "there are {} roots", self.rooted_set.len());
         let mut worklist = vec![];
         for &(root, _) in &self.rooted_set {
             worklist.push(root);
@@ -428,24 +428,24 @@ impl Heap {
                 worklist.extend(item.trace());
             }
         }
-        debug!(target: "gc", "mark phase complete");
+        info!(target: "gc", "mark phase complete");
     }
 
     /// Collects the unmarked pointers identified in the mark phase
     /// into free lists, deallocating any segments that have become
     /// empty as a result of garbage collection.
     fn sweep_phase(&mut self) {
-        debug!(target: "gc", "begin sweep phase for object arena");
+        info!(target: "gc", "begin sweep phase for object arena");
         self.object_arena.sweep();
-        debug!(target: "gc", "begin sweep phase for string arena");
+        info!(target: "gc", "begin sweep phase for string arena");
         self.string_arena.sweep();
-        debug!(target: "gc", "begin sweep phase for number arena");
+        info!(target: "gc", "begin sweep phase for number arena");
         self.number_arena.sweep();
-        debug!(target: "gc", "begin sweep phase for boolean arena");
+        info!(target: "gc", "begin sweep phase for boolean arena");
         self.boolean_arena.sweep();
-        debug!(target: "gc", "begin sweep phase for activation arena");
+        info!(target: "gc", "begin sweep phase for activation arena");
         self.activation_arena.sweep();
-        debug!(target: "gc", "sweep phase complete");
+        info!(target: "gc", "sweep phase complete");
     }
 }
 

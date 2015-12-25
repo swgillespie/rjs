@@ -638,6 +638,9 @@ impl ExecutionEngine {
                 Opcode::Ret => {
                     debug!(target: "exec", "returning from function");
                     let ret_value = stack.pop().expect("popped from empty stack: ret");
+                    if stack.len() > 0 {
+                        warn!(target: "exec", "returning with {} elements still on stack", stack.len());
+                    }
                     return Ok(ret_value);
                 }
                 Opcode::Throw => {
@@ -651,7 +654,6 @@ impl ExecutionEngine {
                     let value = stack.pop().expect("popped from empty stack: def");
                     try!(activation.borrow_mut().create_mutable_binding(self, name, true));
                     try!(activation.borrow_mut().set_mutable_binding(self, name, &value, false));
-                    stack.push(self.heap.root_value(Value::undefined()));
                 }
                 Opcode::This => {
                     let this = activation.borrow().implicit_this_value(self);

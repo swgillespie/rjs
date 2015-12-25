@@ -6,6 +6,17 @@ pub fn disassemble_program(compiled: &compiler::CompiledProgram) {
     for function in compiled.functions() {
         disassemble_function(function, compiled.interner());
     }
+
+    disassemble_global(compiled.current_global_function(), compiled.interner());
+}
+
+pub fn disassemble_global(code: &[Opcode], interner: &compiler::StringInterner) {
+    println!("global function:");
+    for (idx, op) in code.iter().enumerate() {
+        print_op(idx, *op, interner);
+    }
+
+    println!("");
 }
 
 pub fn disassemble_function(function: &compiler::CompiledFunction,

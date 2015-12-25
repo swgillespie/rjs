@@ -56,7 +56,10 @@ impl ExecutionEngine {
         let mut parser = Parser::new(Lexer::new(iter));
         let ast = match parser.parse_program() {
             Ok(ast) => ast,
-            Err(_) => return self.throw_syntax_error("failed to parse"),
+            Err(e) => {
+                debug!(target: "exec", "encountered syntax error: {:?}", e);
+                return self.throw_syntax_error("failed to parse");
+            }
         };
 
         debug!(target: "exec", "compiling eval string");
@@ -251,13 +254,13 @@ impl ExecutionEngine {
                     }
                 }
                 Opcode::Sub => {
-                    let one = stack.pop().expect("popped from empty stack: sub");
-                    let two = stack.pop().expect("popped from empty stack: sub");
+                    let rhs = stack.pop().expect("popped from empty stack: sub");
+                    let lhs = stack.pop().expect("popped from empty stack: sub");
                     let alloc = self.heap.allocate_number();
                     //  TODO verify that subtraction conforms with section 11.6.3,
                     //       changing if it does not
-                    *alloc.borrow_mut() = helpers::to_number(self, &one) -
-                                          helpers::to_number(self, &two);
+                    *alloc.borrow_mut() = helpers::to_number(self, &lhs) -
+                                          helpers::to_number(self, &rhs);
                     stack.push(alloc.into_rooted_value(&mut self.heap));
                 }
                 Opcode::Mul => {
@@ -418,11 +421,11 @@ impl ExecutionEngine {
                     *alloc.borrow_mut() = as_bool;
                     stack.push(alloc.into_rooted_value(&mut self.heap));
                     if as_bool {
-                        ip += (ip as isize)
-                                  .checked_add(offset)
-                                  .expect("arithmetic \
-                                           overflow calculat\
-                                           ing or offset") as usize;
+                        ip = (ip as isize)
+                                 .checked_add(offset)
+                                 .expect("arithmetic \
+                                          overflow calculati\
+                                          ng or offset") as usize;
                     }
                 }
                 Opcode::Eq => {
@@ -576,29 +579,29 @@ impl ExecutionEngine {
                 Opcode::BrTrue(offset) => {
                     let value = stack.pop().expect("popped from empty stack: brtrue");
                     if helpers::to_boolean(self, &value) {
-                        ip += (ip as isize)
-                                  .checked_add(offset)
-                                  .expect("arithmetic \
-                                           overflow calculat\
-                                           ing or offset") as usize;
+                        ip = (ip as isize)
+                                 .checked_add(offset)
+                                 .expect("arithmetic \
+                                          overflow calculati\
+                                          ng or offset") as usize;
                     }
                 }
                 Opcode::BrFalse(offset) => {
                     let value = stack.pop().expect("popped from empty stack: brfalse");
                     if !helpers::to_boolean(self, &value) {
-                        ip += (ip as isize)
-                                  .checked_add(offset)
-                                  .expect("arithmetic \
-                                           overflow calculat\
-                                           ing or offset") as usize;
+                        ip = (ip as isize)
+                                 .checked_add(offset)
+                                 .expect("arithmetic \
+                                          overflow calculati\
+                                          ng or offset") as usize;
                     }
                 }
                 Opcode::Jump(offset) => {
-                    ip += (ip as isize)
-                              .checked_add(offset)
-                              .expect("arithmetic \
-                                       overflow calculatin\
-                                       g or offset") as usize;
+                    ip = (ip as isize)
+                             .checked_add(offset)
+                             .expect("arithmetic overflow \
+                                      calculating or \
+                                      offset") as usize;
                 }
                 Opcode::Debugger => {
                     // do nothing.
@@ -647,6 +650,8 @@ impl ExecutionEngine {
                 Opcode::Def(name) => {
                     let value = stack.pop().expect("popped from empty stack: def");
                     try!(activation.borrow_mut().create_mutable_binding(self, name, true));
+                    try!(activation.borrow_mut().set_mutable_binding(self, name, &value, false));
+                    stack.push(self.heap.root_value(Value::undefined()));
                 }
                 Opcode::This => {
                     let this = activation.borrow().implicit_this_value(self);

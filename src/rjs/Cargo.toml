@@ -9,3 +9,4 @@ path = "../librjs"
 [dependencies]
 time = "0.1.34"
 readline = "0.0.11"
+env_logger = "0.3"

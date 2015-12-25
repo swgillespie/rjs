@@ -269,11 +269,12 @@ impl FunctionActivation {
     }
 
     pub fn create_mutable_binding(&mut self,
-                                  _: &mut ExecutionEngine,
+                                  ee: &mut ExecutionEngine,
                                   ident: InternedString,
                                   deletable: bool)
                                   -> EvalResult<()> {
         debug_assert!(!self.map.contains_key(&ident));
+        debug!(target: "activation", "creating activation binding for \"{}\"", ee.interner().get(ident));
         let entry = ActivationEntry::new(deletable, true);
         self.map.insert(ident, entry);
         return Ok(());
@@ -285,6 +286,7 @@ impl FunctionActivation {
                                value: &RootedValue,
                                should_throw: bool)
                                -> EvalResult<()> {
+        debug!(target: "activation", "setting mutable binding for \"{}\"", ee.interner().get(ident));
         match self.map.entry(ident) {
             Entry::Occupied(mut entry) => {
                 if !entry.get().is_mutable() {
@@ -305,7 +307,9 @@ impl FunctionActivation {
     }
 
     pub fn get_binding_value(&self, ee: &mut ExecutionEngine, ident: InternedString) -> EvalValue {
+        debug!(target: "activation", "getting binding value for \"{}\"", ee.interner().get(ident));
         if let Some(entry) = self.map.get(&ident) {
+            debug!(target: "activation", "activation hit for \"{}\"", ee.interner().get(ident));
             if !entry.is_mutable() && !entry.has_been_initialized() {
                 return ee.throw_reference_error("get_binding_value");
             }
@@ -313,6 +317,7 @@ impl FunctionActivation {
             return Ok(ee.heap_mut().root_value(entry.value()));
         }
 
+        debug!(target: "activation", "activation miss for \"{}\", searching parent activation", ee.interner().get(ident));
         if let Some(activation) = self.parent {
             activation.borrow().get_binding_value(ee, ident)
         } else {

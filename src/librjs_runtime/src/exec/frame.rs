@@ -2,20 +2,17 @@
 //! The list of frames maintained by the ExecutionEngine forms the "stack".
 
 use heap::RootedActivationPtr;
-use compiler::CompiledFunction;
-
-use std::rc::Rc;
 
 pub struct Frame {
     pub activation: RootedActivationPtr,
-    pub code_object: Rc<CompiledFunction>,
+    pub name: String,
 }
 
 impl Frame {
-    pub fn new(activation: RootedActivationPtr, code_object: CompiledFunction) -> Frame {
+    pub fn new(activation: RootedActivationPtr, name: String) -> Frame {
         Frame {
             activation: activation,
-            code_object: Rc::new(code_object),
+            name: name,
         }
     }
 }

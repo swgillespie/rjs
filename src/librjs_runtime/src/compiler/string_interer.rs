@@ -3,6 +3,7 @@ use std::convert::AsRef;
 
 pub type InternedString = usize;
 
+#[derive(Clone, Default)]
 pub struct StringInterner {
     table: Vec<String>,
     index_map: HashMap<String, usize>,

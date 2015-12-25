@@ -33,3 +33,8 @@ pub fn lower_hir_to_bytecode(interner: string_interer::StringInterner,
     let builder = bytecode_builder::BytecodeBuilder::new(interner);
     builder.lower_program(hir)
 }
+
+pub fn lower_hir_to_bytecode_append(program: &mut emitter::CompiledProgram, hir: &hir::Program) {
+    let builder = bytecode_builder::BytecodeBuilder::new_append(program);
+    builder.append_program(hir, program);
+}

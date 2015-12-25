@@ -65,9 +65,9 @@ pub fn to_int32(ee: &mut ExecutionEngine, value: &RootedValue) -> i32 {
     }
 
     let pos_int = (num.signum() * num.abs().floor()) as i64;
-    let int32bit = (pos_int & (2 ^ 32 - 1)) as i32;
-    if int32bit > 2 ^ 31 {
-        int32bit - 2 ^ 32
+    let int32bit = (pos_int & ((1 << 32) - 1)) as i32;
+    if int32bit > 1 << 31 {
+        int32bit - (1i64 << 32) as i32
     } else {
         int32bit
     }
@@ -80,7 +80,7 @@ pub fn to_uint32(ee: &mut ExecutionEngine, value: &RootedValue) -> u32 {
     }
 
     let pos_int = (num.signum() * num.abs().floor()) as i64;
-    (pos_int & (2 ^ 32 - 1)) as u32
+    (pos_int & ((1 << 32) - 1)) as u32
 }
 
 pub fn to_object(_: &mut ExecutionEngine, _: &RootedValue) -> RootedObjectPtr {
@@ -91,8 +91,11 @@ pub fn type_of(_: &mut ExecutionEngine, _: &RootedValue) -> String {
     unimplemented!()
 }
 
-pub fn to_primitive(_: &mut ExecutionEngine, _: &RootedValue) -> RootedValue {
-    unimplemented!()
+pub fn to_primitive(_: &mut ExecutionEngine, value: &RootedValue) -> RootedValue {
+    match **value {
+        Value::Object(_) => unimplemented!(), // TODO
+        _ => value.clone(),
+    }
 }
 
 pub fn equals(_: &mut ExecutionEngine, _: &RootedValue, _: &RootedValue) -> bool {

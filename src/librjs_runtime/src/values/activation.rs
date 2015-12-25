@@ -55,7 +55,7 @@ impl Default for Activation {
 
 impl Activation {
     pub fn new_function_activation(ee: &mut ExecutionEngine,
-                                   parent: ActivationPtr,
+                                   parent: Option<ActivationPtr>,
                                    this: RootedValue)
                                    -> RootedActivationPtr {
         let act = Activation {
@@ -117,14 +117,10 @@ impl Activation {
         }
     }
 
-    pub fn get_binding_value(&self,
-                             ee: &mut ExecutionEngine,
-                             ident: InternedString,
-                             should_throw: bool)
-                             -> EvalValue {
+    pub fn get_binding_value(&self, ee: &mut ExecutionEngine, ident: InternedString) -> EvalValue {
         match self.backing_repr {
-            ActivationKind::Function(ref act) => act.get_binding_value(ee, ident, should_throw),
-            ActivationKind::With(ref act) => act.get_binding_value(ee, ident, should_throw),
+            ActivationKind::Function(ref act) => act.get_binding_value(ee, ident),
+            ActivationKind::With(ref act) => act.get_binding_value(ee, ident),
             ActivationKind::DefaultSentinel => self.panic_on_default_sentinel(),
         }
     }
@@ -212,6 +208,7 @@ impl ActivationEntry {
         self.has_been_initialized
     }
 
+    #[allow(dead_code)]
     pub fn mark_as_initialized(&mut self) {
         debug_assert!(!self.is_mutable());
         self.has_been_initialized = true;
@@ -249,9 +246,9 @@ impl Trace for FunctionActivation {
 }
 
 impl FunctionActivation {
-    pub fn new(parent: ActivationPtr, this: RootedValue) -> FunctionActivation {
+    pub fn new(parent: Option<ActivationPtr>, this: RootedValue) -> FunctionActivation {
         FunctionActivation {
-            parent: Some(parent),
+            parent: parent,
             this: this.into_inner(),
             map: HashMap::new(),
         }
@@ -307,31 +304,19 @@ impl FunctionActivation {
         }
     }
 
-    pub fn get_binding_value(&self,
-                             ee: &mut ExecutionEngine,
-                             ident: InternedString,
-                             should_throw: bool)
-                             -> EvalValue {
+    pub fn get_binding_value(&self, ee: &mut ExecutionEngine, ident: InternedString) -> EvalValue {
         if let Some(entry) = self.map.get(&ident) {
             if !entry.is_mutable() && !entry.has_been_initialized() {
-                if should_throw {
-                    return ee.throw_reference_error("get_binding_value");
-                }
-
-                return Ok(ee.heap_mut().root_value(Value::undefined()));
+                return ee.throw_reference_error("get_binding_value");
             }
 
             return Ok(ee.heap_mut().root_value(entry.value()));
         }
 
         if let Some(activation) = self.parent {
-            activation.borrow().get_binding_value(ee, ident, should_throw)
+            activation.borrow().get_binding_value(ee, ident)
         } else {
-            if should_throw {
-                return ee.throw_reference_error("get_binding_value");
-            }
-
-            return Ok(ee.heap_mut().root_value(Value::undefined()));
+            return ee.throw_reference_error("get_binding_value");
         }
     }
 
@@ -356,6 +341,7 @@ impl FunctionActivation {
         ee.heap_mut().root_value(self.this)
     }
 
+    #[allow(dead_code)]
     pub fn create_immutable_binding(&mut self, ident: InternedString) {
         debug_assert!(!self.map.contains_key(&ident));
         // SPEC_NOTE: can an immutable binding be deleted? going with no for now. the spec
@@ -364,6 +350,7 @@ impl FunctionActivation {
         self.map.insert(ident, entry);
     }
 
+    #[allow(dead_code)]
     pub fn initialize_immutable_binding(&mut self, ident: InternedString, value: &RootedValue) {
         let binding = self.map
                           .get_mut(&ident)
@@ -408,6 +395,7 @@ impl WithActivation {
         }
     }
 
+    #[allow(dead_code)]
     pub fn provide_this(&mut self) {
         self.provide_this = true;
     }
@@ -439,19 +427,11 @@ impl WithActivation {
         return obj.borrow_mut().put(ee, ident, value, should_throw);
     }
 
-    pub fn get_binding_value(&self,
-                             ee: &mut ExecutionEngine,
-                             ident: InternedString,
-                             should_throw: bool)
-                             -> EvalValue {
+    pub fn get_binding_value(&self, ee: &mut ExecutionEngine, ident: InternedString) -> EvalValue {
         let obj = self.object.unwrap_object();
         let mut cell = obj.borrow_mut();
-        if cell.has_property(ee, ident) {
-            if should_throw {
-                return ee.throw_type_error("get_binding_value");
-            } else {
-                return Ok(ee.heap_mut().root_value(Value::undefined()));
-            }
+        if !cell.has_property(ee, ident) {
+            return ee.throw_type_error("get_binding_value");
         }
 
         return cell.get(ee, ident);

@@ -3,6 +3,7 @@
 
 use heap::{Heap, RootedActivationPtr};
 use values::{EvalResult, RootedValue, EvalValue, Value, IntoRootedValue};
+use values::activation::Activation;
 use values::object::HostObject;
 use exec::frame::Frame;
 use compiler::{self, CompiledProgram, CompiledFunction, StringInterner, Opcode};
@@ -16,18 +17,33 @@ use std::collections::LinkedList;
 use std::f64;
 
 pub struct ExecutionEngine {
-    heap: Heap,
+    heap: Box<Heap>,
     stack: LinkedList<Frame>,
     program: CompiledProgram,
 }
 
 impl ExecutionEngine {
     pub fn new(program: CompiledProgram) -> ExecutionEngine {
-        ExecutionEngine {
-            heap: Heap::new(),
+        let mut heap = Heap::new();
+        let obj = heap.allocate_object().into_rooted_value(&mut heap);
+
+        // ATTENTION - IT IS EXTREMELY IMPORTANT THAT HEAP NEVER GET MOVED.
+        // if it does, it immediately invalidates the pointer that obj contains
+        // and we get segmentation faults.
+        //
+        // In order to avoid moving heap, we initialize global object to be uninitialized
+        // and fill it in immediately afterward using the heap in its final place.
+        let ee = ExecutionEngine {
+            heap: Box::new(Heap::new()),
             stack: LinkedList::new(),
             program: program,
-        }
+        };
+
+        // let obj = ee.heap_mut().allocate_object();
+        // ee.global_object = obj.into_rooted_value(ee.heap_mut());
+
+        // self.initialize_base_environment();
+        ee
     }
 
     pub fn eval_str<S: AsRef<str>>(&mut self, value: S) -> EvalValue {
@@ -36,15 +52,49 @@ impl ExecutionEngine {
     }
 
     pub fn eval<I: Iterator<Item = char>>(&mut self, iter: I) -> EvalValue {
+        debug!(target: "exec", "entering new eval context");
         let mut parser = Parser::new(Lexer::new(iter));
         let ast = match parser.parse_program() {
             Ok(ast) => ast,
             Err(_) => return self.throw_syntax_error("failed to parse"),
         };
 
+        debug!(target: "exec", "compiling eval string");
         let hir = compiler::lower_program_to_hir(self.interner_mut(), &ast);
-        // let prog = compiler::lower_hir_to_bytecode_and_append(self.interner_mut()
-        unimplemented!()
+        compiler::lower_hir_to_bytecode_append(&mut self.program, &hir);
+
+        // here, the final entry in the global function vector of program
+        // contains the code that should be evaled.
+        // According to the spec, eval code should use the same environment
+        // as its caller, so we use the existing activation.
+        let activation = self.get_activation();
+
+        let code = {
+            self.program.current_global_function().to_vec()
+        };
+
+        let frame = Frame::new(activation.clone(), "<eval code>".to_string());
+        self.stack.push_front(frame);
+        self.execute(activation, &code)
+    }
+
+    // Helper function to the above function to get around the borrow checker
+    // limitation on this if let.
+    fn get_activation(&mut self) -> RootedActivationPtr {
+        // if the stack has been set up, i.e. this is a call to `eval`,
+        // use the previous frame's activation.
+
+        // TODO the borrow checker is not intelligent enough to figure out that
+        // the borrow of self.stack does not extend to the else.
+
+        if let Some(frame) = self.stack.front() {
+            return frame.activation.clone();
+        }
+
+        // otherwise, we need to create the root activation, with `this` as
+        // the global object.
+        let obj = self.heap.root_value(Value::Undefined); // TODO global object this
+        return Activation::new_function_activation(self, None, obj);
     }
 
     pub fn call(&mut self,
@@ -53,10 +103,16 @@ impl ExecutionEngine {
                 this: &RootedValue,
                 activation: RootedActivationPtr)
                 -> EvalValue {
+        let frame_name = {
+            code_obj.name()
+                    .map(|idx| self.program.interner().get(idx))
+                    .unwrap_or("<anonymous function>")
+                    .to_string()
+        };
         // create a new stack frame and stick it on the stack.
-        let frame = Frame::new(activation, code_obj.clone());
+        let frame = Frame::new(activation.clone(), frame_name);
         self.stack.push_front(frame);
-        self.execute()
+        self.execute(activation, code_obj.code())
     }
 
     pub fn heap_mut(&mut self) -> &mut Heap {
@@ -96,15 +152,10 @@ impl ExecutionEngine {
     }
 
     /// Executes the current stack frame.
-    fn execute(&mut self) -> EvalValue {
-        let (activation, code_obj) = {
-            let frame = self.stack.front_mut().expect("execution stack won't be empty here");
-            (frame.activation.clone(), frame.code_object.clone())
-        };
-
-        let code = code_obj.code();
+    fn execute(&mut self, activation: RootedActivationPtr, code: &[Opcode]) -> EvalValue {
         let mut ip = 0;
         let mut stack: Vec<RootedValue> = vec![];
+        debug!(target: "exec", "entering bytecode interpreter loop");
         loop {
             let opcode = code[ip];
             match opcode {
@@ -177,16 +228,16 @@ impl ExecutionEngine {
                     stack.push(alloc.into_rooted_value(&mut self.heap));
                 }
                 Opcode::Add => {
-                    let one = stack.pop().expect("popped from empty stack: add");
-                    let two = stack.pop().expect("popped from empty stack: add");
-                    let one_primitive = helpers::to_primitive(self, &one);
-                    let two_primitive = helpers::to_primitive(self, &two);
+                    let rhs = stack.pop().expect("popped from empty stack: add");
+                    let lhs = stack.pop().expect("popped from empty stack: add");
+                    let rhs_primitive = helpers::to_primitive(self, &rhs);
+                    let lhs_primitive = helpers::to_primitive(self, &lhs);
 
-                    if one_primitive.is_string() || two_primitive.is_string() {
+                    if rhs_primitive.is_string() || lhs_primitive.is_string() {
                         let alloc = self.heap.allocate_string();
                         *alloc.borrow_mut() = {
-                            let mut one_str = helpers::to_string(self, &one_primitive);
-                            one_str.push_str(&helpers::to_string(self, &two_primitive));
+                            let mut one_str = helpers::to_string(self, &lhs_primitive);
+                            one_str.push_str(&helpers::to_string(self, &rhs_primitive));
                             one_str
                         };
                         stack.push(alloc.into_rooted_value(&mut self.heap));
@@ -194,8 +245,8 @@ impl ExecutionEngine {
                         let alloc = self.heap.allocate_number();
                         //  TODO verify that addition conforms with section 11.6.3,
                         //       changing if it does not
-                        *alloc.borrow_mut() = helpers::to_number(self, &one_primitive) +
-                                              helpers::to_number(self, &two_primitive);
+                        *alloc.borrow_mut() = helpers::to_number(self, &lhs_primitive) +
+                                              helpers::to_number(self, &rhs_primitive);
                         stack.push(alloc.into_rooted_value(&mut self.heap));
                     }
                 }
@@ -510,12 +561,12 @@ impl ExecutionEngine {
 
                     unimplemented!()
                 }
-                Opcode::InitPropertyGetter(name) => unimplemented!(),
-                Opcode::InitPropertySetter(name) => unimplemented!(),
+                Opcode::InitPropertyGetter(name) => panic!("unimplemented: initpropertygetter"),
+                Opcode::InitPropertySetter(name) => panic!("unimplemented: initpropertysetter"),
                 Opcode::EnterWith => unimplemented!(),
                 Opcode::ExitWith => unimplemented!(),
                 Opcode::LdName(name) => {
-                    let result = try!(activation.borrow().get_binding_value(self, name, false));
+                    let result = try!(activation.borrow().get_binding_value(self, name));
                     stack.push(result);
                 }
                 Opcode::StName(name) => {
@@ -574,14 +625,15 @@ impl ExecutionEngine {
                 Opcode::LdUndefined => {
                     stack.push(self.heap.root_value(Value::Undefined));
                 }
-                Opcode::LdRegex(regex, flags) => unimplemented!(),
+                Opcode::LdRegex(regex, flags) => panic!("unimplemented: ldregex"),
                 Opcode::LdLambda(index) => {
                     let compiled_function = &self.program.function_index(index);
                     // make a code object
                     unimplemented!()
                 }
-                Opcode::LdObject => unimplemented!(),
+                Opcode::LdObject => panic!("unimplemented: ldobject"),
                 Opcode::Ret => {
+                    debug!(target: "exec", "returning from function");
                     let ret_value = stack.pop().expect("popped from empty stack: ret");
                     return Ok(ret_value);
                 }
@@ -590,8 +642,8 @@ impl ExecutionEngine {
                     // throw exception
                     unimplemented!()
                 }
-                Opcode::Call(num_args) => unimplemented!(),
-                Opcode::New(num_args) => unimplemented!(),
+                Opcode::Call(num_args) => panic!("unimplemented: call"),
+                Opcode::New(num_args) => panic!("unimplemented: new"),
                 Opcode::Def(name) => {
                     let value = stack.pop().expect("popped from empty stack: def");
                     try!(activation.borrow_mut().create_mutable_binding(self, name, true));

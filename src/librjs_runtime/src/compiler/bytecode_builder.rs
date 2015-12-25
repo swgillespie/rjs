@@ -29,14 +29,49 @@ impl BytecodeBuilder {
         }
     }
 
+    pub fn new_append(compiled: &CompiledProgram) -> BytecodeBuilder {
+        // CompiledProgram expects to own its data structures, as does BytecodeBuilder.
+        // in order to be consistent, we clone the existing string interner here and
+        // replace it at the end of bytecode creation.
+        BytecodeBuilder {
+            interner: compiled.interner().clone(),
+            is_strict: false,
+            should_produce_result: false,
+            functions: compiled.functions().to_vec(),
+            function_index: Cell::new(compiled.functions().len()),
+        }
+    }
+
+    pub fn append_program(self, program: &hir::Program, compiled: &mut CompiledProgram) {
+        let program = self.lower_program(program);
+        compiled.merge(program);
+    }
+
     pub fn lower_program(mut self, program: &hir::Program) -> CompiledProgram {
         let mut global_emitter = GlobalEmitter::new();
         self.is_strict = program.is_strict();
 
-        for stmt in program.statements() {
+        if program.statements().len() == 0 {
+            // an empty statement list evals to undefined.
+            global_emitter.emit_ldundefined();
+            global_emitter.emit_ret();
+            return global_emitter.bake(self.functions, self.interner);
+        }
+
+        let (init, last) = program.statements().split_at(program.statements().len() - 1);
+        let saved = self.should_produce_result;
+
+        self.should_produce_result = false;
+        for stmt in init {
             self.lower_statement(&mut global_emitter, stmt);
         }
 
+        // the entire block evaluates to the last statement in the block.
+        self.should_produce_result = true;
+        self.lower_statement(&mut global_emitter, &last[0]);
+        self.should_produce_result = saved;
+
+        global_emitter.emit_ret();
         global_emitter.bake(self.functions, self.interner)
     }
 

@@ -23,10 +23,11 @@ use super::bytecode::Opcode;
 pub type Offset = isize;
 pub type Label = usize;
 
+#[derive(Default)]
 pub struct CompiledProgram {
     strings: StringInterner,
     functions: Box<[CompiledFunction]>,
-    global_function: Box<[Opcode]>,
+    global_functions: Vec<Box<[Opcode]>>,
 }
 
 impl CompiledProgram {
@@ -46,8 +47,14 @@ impl CompiledProgram {
         &self.functions[index]
     }
 
-    pub fn global_function(&self) -> &[Opcode] {
-        &self.global_function
+    pub fn current_global_function(&self) -> &[Opcode] {
+        self.global_functions.last().expect("should have at least one global function")
+    }
+
+    pub fn merge(&mut self, other: CompiledProgram) {
+        self.functions = other.functions;
+        self.global_functions.extend(other.global_functions);
+        self.strings = other.strings;
     }
 }
 
@@ -367,7 +374,7 @@ impl GlobalEmitter {
         CompiledProgram {
             strings: interner,
             functions: functions.into_boxed_slice(),
-            global_function: self.global_opcodes.into_boxed_slice(),
+            global_functions: vec![self.global_opcodes.into_boxed_slice()],
         }
     }
 }

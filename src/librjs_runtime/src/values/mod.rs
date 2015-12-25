@@ -200,6 +200,7 @@ into_rooted_value_impl!(heap::RootedNumberPtr, Value::Number);
 into_rooted_value_impl!(heap::RootedObjectPtr, Value::Object);
 into_rooted_value_impl!(heap::RootedStringPtr, Value::String);
 
+#[derive(Debug)]
 pub struct Exception;
 pub type EvalResult<T> = Result<T, Exception>;
 pub type EvalValue = Result<RootedValue, Exception>;

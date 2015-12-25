@@ -4,13 +4,15 @@ extern crate readline;
 
 mod dis;
 
-use std::io::{self, Read, Write, StdoutLock};
+use std::io::{self, Read, Write};
 use std::fs::File;
 use std::env;
 use librjs::syntax::{Lexer, Parser};
 use librjs::runtime::compiler;
+use librjs::runtime::exec::engine::ExecutionEngine;
 use time::Duration;
 use std::ffi::CString;
+use std::default::Default;
 
 fn main() {
     let args: Vec<_> = env::args().collect();
@@ -19,7 +21,7 @@ fn main() {
         return;
     }
 
-    let mut interner = compiler::StringInterner::new();
+    let mut ee = ExecutionEngine::new(Default::default());
     let stdout_unlocked = io::stdout();
     let mut stdout = stdout_unlocked.lock();
     let prompt = CString::new(">> ").unwrap();
@@ -33,25 +35,16 @@ fn main() {
         };
 
         readline::add_history(&data);
-        parse_and_print(as_str, &mut stdout, &mut interner);
+        let result = match ee.eval_str(as_str) {
+            Ok(value) => {
+                librjs::runtime::exec::helpers::to_string(&mut ee, &value)
+            },
+            Err(e) => panic!("error: {:?}", e)
+        };
+
+        writeln!(&mut stdout, "{}", result).unwrap();
+        stdout.flush().unwrap();
     }
-}
-
-fn parse_and_print(data: &str, stdout: &mut StdoutLock, interner: &mut compiler::StringInterner) {
-    let lexer = Lexer::new(data.chars());
-    let mut parser = Parser::new(lexer);
-    let ast = match parser.parse_statement() {
-        Ok(a) => a,
-        Err(e) => {
-            writeln!(stdout, "error: {:#?}", e).unwrap();
-            return;
-        }
-    };
-
-    let hir = compiler::lower_statement_to_hir(interner, &ast);
-    writeln!(stdout, "{:#?}", hir).unwrap();
-
-    stdout.flush().unwrap();
 }
 
 fn parse_file(filename: &str) {

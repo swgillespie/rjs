@@ -10,3 +10,6 @@ path = "../librjs_syntax"
 bit-set = "0.2.0"
 bit-vec = "0.4.2"
 log = "0.3.3"
+
+[dev-dependencies]
+env_logger = "0.3"

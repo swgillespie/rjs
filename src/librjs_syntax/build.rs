@@ -9,7 +9,9 @@ fn main() {
     let path = Path::new(&env::var("OUT_DIR").unwrap()).join("reserved_words.rs");
     let mut file = BufWriter::new(File::create(&path).unwrap());
 
-    write!(&mut file, "static RESERVED_WORDS: phf::Map<&'static str, TokenKind> = ").unwrap();
+    write!(&mut file,
+           "static RESERVED_WORDS: phf::Map<&'static str, TokenKind> = ")
+        .unwrap();
     phf_codegen::Map::new()
         .entry("break", "TokenKind::Break")
         .entry("do", "TokenKind::Do")
@@ -44,14 +46,19 @@ fn main() {
         .entry("const", "TokenKind::Const")
         .entry("export", "TokenKind::Export")
         .entry("import", "TokenKind::Import")
-        .entry("implements", "TokenKind::FutureReservedWordStrict(\"implements\")")
+        .entry("implements",
+               "TokenKind::FutureReservedWordStrict(\"implements\")")
         .entry("let", "TokenKind::FutureReservedWordStrict(\"let\")")
-        .entry("private", "TokenKind::FutureReservedWordStrict(\"private\")")
+        .entry("private",
+               "TokenKind::FutureReservedWordStrict(\"private\")")
         .entry("public", "TokenKind::FutureReservedWordStrict(\"public\")")
         .entry("yield", "TokenKind::FutureReservedWordStrict(\"yield\")")
-        .entry("interface", "TokenKind::FutureReservedWordStrict(\"interface\")")
-        .entry("package", "TokenKind::FutureReservedWordStrict(\"package\")")
-        .entry("protected", "TokenKind::FutureReservedWordStrict(\"protected\")")
+        .entry("interface",
+               "TokenKind::FutureReservedWordStrict(\"interface\")")
+        .entry("package",
+               "TokenKind::FutureReservedWordStrict(\"package\")")
+        .entry("protected",
+               "TokenKind::FutureReservedWordStrict(\"protected\")")
         .entry("static", "TokenKind::FutureReservedWordStrict(\"static\")")
         .entry("null", "TokenKind::NullLiteral")
         .entry("false", "TokenKind::BooleanLiteral(false)")

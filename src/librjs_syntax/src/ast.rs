@@ -4,14 +4,14 @@ use std::fmt::Debug;
 #[derive(Debug)]
 pub struct Spanned<T: Debug> {
     pub data: T,
-    pub span: Span
+    pub span: Span,
 }
 
 impl<T: Clone + Debug> Clone for Spanned<T> {
     fn clone(&self) -> Spanned<T> {
         Spanned {
             data: self.data.clone(),
-            span: self.span.clone()
+            span: self.span.clone(),
         }
     }
 }
@@ -26,7 +26,7 @@ impl<T: Debug> Spanned<T> {
     pub fn new(span: Span, data: T) -> Spanned<T> {
         Spanned {
             span: span,
-            data: data
+            data: data,
         }
     }
 }
@@ -41,13 +41,13 @@ pub enum Literal {
     Boolean(bool),
     Null,
     Numeric(f64),
-    RegExp(String, String)
+    RegExp(String, String),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Program {
     pub directive_prologue: Vec<SpannedStatement>,
-    pub statements: Vec<SpannedStatement>
+    pub statements: Vec<SpannedStatement>,
 }
 
 pub type SpannedFunction = Spanned<Function>;
@@ -57,7 +57,7 @@ pub struct Function {
     pub name: Option<Identifier>,
     pub parameters: Vec<SpannedPattern>,
     pub prologue: Vec<SpannedStatement>,
-    pub body: Vec<SpannedStatement>
+    pub body: Vec<SpannedStatement>,
 }
 
 pub type SpannedStatement = Spanned<Statement>;
@@ -79,40 +79,43 @@ pub enum Statement {
     Try(Box<SpannedStatement>, Option<CatchClause>, Option<Box<SpannedStatement>>),
     While(SpannedExpression, Box<SpannedStatement>),
     DoWhile(SpannedExpression, Box<SpannedStatement>),
-    For(Option<ForInit>, Option<SpannedExpression>, Option<SpannedExpression>, Box<SpannedStatement>),
+    For(Option<ForInit>,
+        Option<SpannedExpression>,
+        Option<SpannedExpression>,
+        Box<SpannedStatement>),
     ForIn(ForInit, SpannedExpression, Box<SpannedStatement>),
-    Declaration(Declaration)
+    Declaration(Declaration),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct SwitchCase {
     pub test: Option<SpannedExpression>,
-    pub body: Vec<SpannedStatement>
+    pub body: Vec<SpannedStatement>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum ForInit {
     VarDec(SpannedDeclaration),
-    Expr(SpannedExpression)
+    Expr(SpannedExpression),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct CatchClause {
     pub param: SpannedPattern,
-    pub body: Box<SpannedStatement>
+    pub body: Box<SpannedStatement>,
 }
 
 pub type SpannedDeclaration = Spanned<Declaration>;
 #[derive(Clone, PartialEq, Debug)]
 pub enum Declaration {
     Function(Function),
-    Variable(Vec<VariableDeclarator>)
+    Variable(Vec<VariableDeclarator>),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct VariableDeclarator {
     pub id: SpannedPattern,
-    pub initial_value: Option<SpannedExpression>
+    pub initial_value: Option<SpannedExpression>,
 }
 
 pub type SpannedExpression = Spanned<Expression>;
@@ -134,21 +137,21 @@ pub enum Expression {
     New(Box<SpannedExpression>, Vec<SpannedExpression>),
     Sequence(Vec<SpannedExpression>),
     Identifier(Identifier),
-    Literal(Literal)
+    Literal(Literal),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Property {
     pub key: LiteralOrIdentifier,
     pub value: Box<SpannedExpression>,
-    pub kind: PropertyKind
+    pub kind: PropertyKind,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum PropertyKind {
     Init,
     Get,
-    Set
+    Set,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -159,13 +162,13 @@ pub enum UnaryOperator {
     BitwiseNot,
     Typeof,
     Void,
-    Delete
+    Delete,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum UpdateOperator {
     Increment,
-    Decrement
+    Decrement,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -190,7 +193,7 @@ pub enum BinaryOperator {
     BitwiseXor,
     BitwiseAnd,
     In,
-    Instanceof
+    Instanceof,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -206,30 +209,30 @@ pub enum AssignmentOperator {
     TripleRightShiftEqual,
     BitwiseOrEqual,
     BitwiseXorEqual,
-    BitwiseAndEqual
+    BitwiseAndEqual,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum LogicalOperator {
     Or,
-    And
+    And,
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum LiteralOrIdentifier {
     Literal(SpannedLiteral),
-    Identifier(Identifier)
+    Identifier(Identifier),
 }
 
 pub type SpannedPattern = Spanned<Pattern>;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum Pattern {
-    Identifier(Identifier)
+    Identifier(Identifier),
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum PatternOrExpression {
     Pattern(SpannedPattern),
-    Expr(Box<SpannedExpression>)
+    Expr(Box<SpannedExpression>),
 }

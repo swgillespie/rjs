@@ -1,5 +1,4 @@
-//#![deny(warnings)]
-#![allow(unused_variables, dead_code)]
+// #![deny(warnings)]
 
 extern crate librjs_syntax;
 extern crate bit_set;
@@ -8,4 +7,6 @@ extern crate bit_vec;
 extern crate log;
 
 pub mod heap;
-pub mod value;
+pub mod values;
+pub mod exec;
+pub mod compiler;

@@ -29,7 +29,10 @@ pub trait Visitor: Sized {
         Default::default()
     }
 
-    fn visit_with_statement(&mut self, expr: &SpannedExpression, stmt: &SpannedStatement) -> Self::Output {
+    fn visit_with_statement(&mut self,
+                            expr: &SpannedExpression,
+                            stmt: &SpannedStatement)
+                            -> Self::Output {
         walk_with_statement(self, expr, stmt)
     }
 
@@ -37,7 +40,10 @@ pub trait Visitor: Sized {
         walk_return_statement(self, expr)
     }
 
-    fn visit_labelled_statement(&mut self, ident: &Identifier, stmt: &SpannedStatement) -> Self::Output {
+    fn visit_labelled_statement(&mut self,
+                                ident: &Identifier,
+                                stmt: &SpannedStatement)
+                                -> Self::Output {
         walk_labelled_statement(self, ident, stmt)
     }
 
@@ -52,11 +58,15 @@ pub trait Visitor: Sized {
     fn visit_if_statement(&mut self,
                           cond: &SpannedExpression,
                           true_branch: &SpannedStatement,
-                          false_branch: Option<&SpannedStatement>) -> Self::Output {
+                          false_branch: Option<&SpannedStatement>)
+                          -> Self::Output {
         walk_if_statement(self, cond, true_branch, false_branch)
     }
 
-    fn visit_switch_statement(&mut self, cond: &SpannedExpression, cases: &[SwitchCase]) -> Self::Output {
+    fn visit_switch_statement(&mut self,
+                              cond: &SpannedExpression,
+                              cases: &[SwitchCase])
+                              -> Self::Output {
         walk_switch_statement(self, cond, cases)
     }
 
@@ -67,19 +77,22 @@ pub trait Visitor: Sized {
     fn visit_try_statement(&mut self,
                            body: &SpannedStatement,
                            catch: Option<&CatchClause>,
-                           finally: Option<&SpannedStatement>) -> Self::Output {
+                           finally: Option<&SpannedStatement>)
+                           -> Self::Output {
         walk_try_statement(self, body, catch, finally)
     }
 
     fn visit_while_statement(&mut self,
                              cond: &SpannedExpression,
-                             body: &SpannedStatement) -> Self::Output {
+                             body: &SpannedStatement)
+                             -> Self::Output {
         walk_while_statement(self, cond, body)
     }
 
     fn visit_do_while_statement(&mut self,
                                 cond: &SpannedExpression,
-                                body: &SpannedStatement) -> Self::Output {
+                                body: &SpannedStatement)
+                                -> Self::Output {
         walk_do_while_statement(self, cond, body)
     }
 
@@ -87,14 +100,16 @@ pub trait Visitor: Sized {
                            init: Option<&ForInit>,
                            condition: Option<&SpannedExpression>,
                            update: Option<&SpannedExpression>,
-                           body: &SpannedStatement) -> Self::Output {
+                           body: &SpannedStatement)
+                           -> Self::Output {
         walk_for_statement(self, init, condition, update, body)
     }
 
     fn visit_for_in_statement(&mut self,
                               init: &ForInit,
                               binding: &SpannedExpression,
-                              body: &SpannedStatement) -> Self::Output {
+                              body: &SpannedStatement)
+                              -> Self::Output {
         walk_for_in_statement(self, init, binding, body)
     }
 
@@ -125,61 +140,70 @@ pub trait Visitor: Sized {
     fn visit_unary_op(&mut self,
                       _: UnaryOperator,
                       _: bool,
-                      expr: &SpannedExpression) -> Self::Output {
+                      expr: &SpannedExpression)
+                      -> Self::Output {
         walk_unary_op(self, expr)
     }
 
     fn visit_binary_op(&mut self,
                        _: BinaryOperator,
                        left: &SpannedExpression,
-                       right: &SpannedExpression) -> Self::Output {
+                       right: &SpannedExpression)
+                       -> Self::Output {
         walk_binary_op(self, left, right)
     }
 
     fn visit_update_op(&mut self,
                        _: UpdateOperator,
                        _: bool,
-                       expr: &SpannedExpression) -> Self::Output {
+                       expr: &SpannedExpression)
+                       -> Self::Output {
         walk_unary_op(self, expr)
     }
 
     fn visit_logical_op(&mut self,
                         _: LogicalOperator,
                         left: &SpannedExpression,
-                        right: &SpannedExpression) -> Self::Output {
+                        right: &SpannedExpression)
+                        -> Self::Output {
         walk_binary_op(self, left, right)
     }
 
     fn visit_member_expression(&mut self,
                                base: &SpannedExpression,
                                target: &SpannedExpression,
-                               calculated: bool) -> Self::Output {
+                               calculated: bool)
+                               -> Self::Output {
         walk_member_expression(self, base, target, calculated)
     }
 
     fn visit_assignment(&mut self,
                         _: AssignmentOperator,
                         target: &PatternOrExpression,
-                        value: &SpannedExpression) -> Self::Output {
+                        value: &SpannedExpression)
+                        -> Self::Output {
         walk_assignment(self, target, value)
     }
 
     fn visit_conditional_expression(&mut self,
                                     cond: &SpannedExpression,
                                     true_value: &SpannedExpression,
-                                    false_value: &SpannedExpression) -> Self::Output {
+                                    false_value: &SpannedExpression)
+                                    -> Self::Output {
         walk_conditional_expression(self, cond, true_value, false_value)
     }
 
     fn visit_call_expression(&mut self,
                              base: &SpannedExpression,
-                             args: &[SpannedExpression]) -> Self::Output {
+                             args: &[SpannedExpression])
+                             -> Self::Output {
         walk_call_expression(self, base, args)
     }
 
     fn visit_new_expression(&mut self,
                             base: &SpannedExpression,
-                            args: &[SpannedExpression]) -> Self::Output {
+                            args: &[SpannedExpression])
+                            -> Self::Output {
         walk_call_expression(self, base, args)
     }
 
@@ -216,22 +240,28 @@ fn walk_statement<V: Visitor>(visitor: &mut V, stmt: &SpannedStatement) -> V::Ou
         Statement::Debugger => visitor.visit_debugger_statement(),
         Statement::With(ref expr, ref stmt) => visitor.visit_with_statement(expr, stmt),
         Statement::Return(ref expr) => visitor.visit_return_statement(expr.as_ref()),
-        Statement::Label(ref label, ref statement) => visitor.visit_labelled_statement(label, statement),
+        Statement::Label(ref label, ref statement) => {
+            visitor.visit_labelled_statement(label, statement)
+        }
         Statement::Break(ref label) => visitor.visit_break_statement(label.as_ref()),
         Statement::Continue(ref label) => visitor.visit_continue_statement(label.as_ref()),
-        Statement::If(ref cond, ref true_branch, ref false_branch) =>
-            visitor.visit_if_statement(cond, true_branch, false_branch.as_ref().map(|x| &**x)),
+        Statement::If(ref cond, ref true_branch, ref false_branch) => {
+            visitor.visit_if_statement(cond, true_branch, false_branch.as_ref().map(|x| &**x))
+        }
         Statement::Switch(ref cond, ref cases) => visitor.visit_switch_statement(cond, cases),
         Statement::Throw(ref expr) => visitor.visit_throw_statement(expr),
-        Statement::Try(ref body, ref catch, ref finally) =>
-            visitor.visit_try_statement(body, catch.as_ref(), finally.as_ref().map(|x| &**x)),
+        Statement::Try(ref body, ref catch, ref finally) => {
+            visitor.visit_try_statement(body, catch.as_ref(), finally.as_ref().map(|x| &**x))
+        }
         Statement::While(ref cond, ref body) => visitor.visit_while_statement(cond, body),
         Statement::DoWhile(ref cond, ref body) => visitor.visit_do_while_statement(cond, body),
-        Statement::For(ref init, ref condition, ref update, ref body) =>
-            visitor.visit_for_statement(init.as_ref(), condition.as_ref(), update.as_ref(), body),
-        Statement::ForIn(ref init, ref binding, ref body) =>
-            visitor.visit_for_in_statement(init, binding, body),
-        Statement::Declaration(ref declaration) => visitor.visit_declaration(declaration)
+        Statement::For(ref init, ref condition, ref update, ref body) => {
+            visitor.visit_for_statement(init.as_ref(), condition.as_ref(), update.as_ref(), body)
+        }
+        Statement::ForIn(ref init, ref binding, ref body) => {
+            visitor.visit_for_in_statement(init, binding, body)
+        }
+        Statement::Declaration(ref declaration) => visitor.visit_declaration(declaration),
     }
 }
 
@@ -250,14 +280,16 @@ fn walk_block<V: Visitor>(visitor: &mut V, block: &[SpannedStatement]) -> V::Out
 
 fn walk_with_statement<V: Visitor>(visitor: &mut V,
                                    expr: &SpannedExpression,
-                                   stmt: &SpannedStatement) -> V::Output {
+                                   stmt: &SpannedStatement)
+                                   -> V::Output {
     visitor.visit_expression(expr);
     visitor.visit_statement(stmt);
     Default::default()
 }
 
 fn walk_return_statement<V: Visitor>(visitor: &mut V,
-                                     expr: Option<&SpannedExpression>) -> V::Output {
+                                     expr: Option<&SpannedExpression>)
+                                     -> V::Output {
     if let Some(value) = expr {
         visitor.visit_expression(value);
     }
@@ -267,7 +299,8 @@ fn walk_return_statement<V: Visitor>(visitor: &mut V,
 
 fn walk_labelled_statement<V: Visitor>(visitor: &mut V,
                                        _: &Identifier,
-                                       stmt: &SpannedStatement) -> V::Output {
+                                       stmt: &SpannedStatement)
+                                       -> V::Output {
     visitor.visit_statement(stmt);
     Default::default()
 }
@@ -275,7 +308,8 @@ fn walk_labelled_statement<V: Visitor>(visitor: &mut V,
 fn walk_if_statement<V: Visitor>(visitor: &mut V,
                                  cond: &SpannedExpression,
                                  true_branch: &SpannedStatement,
-                                 false_branch: Option<&SpannedStatement>) -> V::Output {
+                                 false_branch: Option<&SpannedStatement>)
+                                 -> V::Output {
     visitor.visit_expression(cond);
     visitor.visit_statement(true_branch);
     if let Some(stmt) = false_branch {
@@ -287,7 +321,8 @@ fn walk_if_statement<V: Visitor>(visitor: &mut V,
 
 fn walk_switch_statement<V: Visitor>(visitor: &mut V,
                                      cond: &SpannedExpression,
-                                     cases: &[SwitchCase]) -> V::Output {
+                                     cases: &[SwitchCase])
+                                     -> V::Output {
     visitor.visit_expression(cond);
     for case in cases {
         if let Some(ref test) = case.test {
@@ -302,8 +337,7 @@ fn walk_switch_statement<V: Visitor>(visitor: &mut V,
     Default::default()
 }
 
-fn walk_throw_statement<V: Visitor>(visitor: &mut V,
-                                    expr: &SpannedExpression) -> V::Output {
+fn walk_throw_statement<V: Visitor>(visitor: &mut V, expr: &SpannedExpression) -> V::Output {
     visitor.visit_expression(expr);
     Default::default()
 }
@@ -311,7 +345,8 @@ fn walk_throw_statement<V: Visitor>(visitor: &mut V,
 fn walk_try_statement<V: Visitor>(visitor: &mut V,
                                   body: &SpannedStatement,
                                   catch: Option<&CatchClause>,
-                                  finally: Option<&SpannedStatement>) -> V::Output {
+                                  finally: Option<&SpannedStatement>)
+                                  -> V::Output {
     visitor.visit_statement(body);
     if let Some(catch_clause) = catch {
         // TODO(ES6) - visiting patterns
@@ -327,7 +362,8 @@ fn walk_try_statement<V: Visitor>(visitor: &mut V,
 
 fn walk_while_statement<V: Visitor>(visitor: &mut V,
                                     cond: &SpannedExpression,
-                                    stmt: &SpannedStatement) -> V::Output {
+                                    stmt: &SpannedStatement)
+                                    -> V::Output {
     visitor.visit_expression(cond);
     visitor.visit_statement(stmt);
     Default::default()
@@ -335,7 +371,8 @@ fn walk_while_statement<V: Visitor>(visitor: &mut V,
 
 fn walk_do_while_statement<V: Visitor>(visitor: &mut V,
                                        cond: &SpannedExpression,
-                                       stmt: &SpannedStatement) -> V::Output {
+                                       stmt: &SpannedStatement)
+                                       -> V::Output {
     visitor.visit_expression(cond);
     visitor.visit_statement(stmt);
     Default::default()
@@ -345,11 +382,12 @@ fn walk_for_statement<V: Visitor>(visitor: &mut V,
                                   init: Option<&ForInit>,
                                   condition: Option<&SpannedExpression>,
                                   update: Option<&SpannedExpression>,
-                                  body: &SpannedStatement) -> V::Output {
+                                  body: &SpannedStatement)
+                                  -> V::Output {
     match init {
         Some(&ForInit::VarDec(ref decl)) => visitor.visit_declaration(&decl.data),
         Some(&ForInit::Expr(ref expr)) => visitor.visit_expression(expr),
-        None => Default::default()
+        None => Default::default(),
     };
 
     if let Some(expr) = condition {
@@ -367,10 +405,11 @@ fn walk_for_statement<V: Visitor>(visitor: &mut V,
 fn walk_for_in_statement<V: Visitor>(visitor: &mut V,
                                      init: &ForInit,
                                      binding: &SpannedExpression,
-                                     body: &SpannedStatement) -> V::Output {
+                                     body: &SpannedStatement)
+                                     -> V::Output {
     match init {
         &ForInit::VarDec(ref decl) => visitor.visit_declaration(&decl.data),
-        &ForInit::Expr(ref expr) => visitor.visit_expression(expr)
+        &ForInit::Expr(ref expr) => visitor.visit_expression(expr),
     };
 
     visitor.visit_expression(binding);
@@ -378,8 +417,7 @@ fn walk_for_in_statement<V: Visitor>(visitor: &mut V,
     Default::default()
 }
 
-fn walk_declaration<V: Visitor>(visitor: &mut V,
-                                decl: &Declaration) -> V::Output {
+fn walk_declaration<V: Visitor>(visitor: &mut V, decl: &Declaration) -> V::Output {
     match decl {
         &Declaration::Function(ref func) => visitor.visit_function(func),
         &Declaration::Variable(ref variables) => {
@@ -397,8 +435,7 @@ fn walk_declaration<V: Visitor>(visitor: &mut V,
     Default::default()
 }
 
-fn walk_expression<V: Visitor>(visitor: &mut V,
-                               expr: &SpannedExpression) -> V::Output {
+fn walk_expression<V: Visitor>(visitor: &mut V, expr: &SpannedExpression) -> V::Output {
     match expr.data {
         Expression::This => visitor.visit_this(),
         Expression::Array(ref values) => visitor.visit_array_literal(values),
@@ -408,17 +445,20 @@ fn walk_expression<V: Visitor>(visitor: &mut V,
         Expression::Binary(op, ref left, ref right) => visitor.visit_binary_op(op, left, right),
         Expression::Update(op, prefix, ref expr) => visitor.visit_update_op(op, prefix, expr),
         Expression::Logical(op, ref left, ref right) => visitor.visit_logical_op(op, left, right),
-        Expression::Member(ref base, ref target, calculated) => visitor.visit_member_expression(base, target, calculated),
-        Expression::Assignment(op, ref target, ref value) => visitor.visit_assignment(op, target, value),
-        Expression::Conditional(ref cond, ref true_value, ref false_value) =>
-            visitor.visit_conditional_expression(cond, true_value, false_value),
-        Expression::Call(ref base, ref args) =>
-            visitor.visit_call_expression(base, args),
-        Expression::New(ref base, ref args) =>
-            visitor.visit_new_expression(base, args),
+        Expression::Member(ref base, ref target, calculated) => {
+            visitor.visit_member_expression(base, target, calculated)
+        }
+        Expression::Assignment(op, ref target, ref value) => {
+            visitor.visit_assignment(op, target, value)
+        }
+        Expression::Conditional(ref cond, ref true_value, ref false_value) => {
+            visitor.visit_conditional_expression(cond, true_value, false_value)
+        }
+        Expression::Call(ref base, ref args) => visitor.visit_call_expression(base, args),
+        Expression::New(ref base, ref args) => visitor.visit_new_expression(base, args),
         Expression::Sequence(ref seq) => visitor.visit_sequence(seq),
         Expression::Identifier(ref ident) => visitor.visit_identifier(ident),
-        Expression::Literal(ref lit) => visitor.visit_literal(lit)
+        Expression::Literal(ref lit) => visitor.visit_literal(lit),
     }
 }
 
@@ -436,7 +476,8 @@ fn walk_function<V: Visitor>(visitor: &mut V, func: &Function) -> V::Output {
 }
 
 fn walk_array_literal<V: Visitor>(visitor: &mut V,
-                                  values: &[Option<SpannedExpression>]) -> V::Output {
+                                  values: &[Option<SpannedExpression>])
+                                  -> V::Output {
     for entry in values {
         if let &Some(ref value) = entry {
             visitor.visit_expression(value);
@@ -446,8 +487,7 @@ fn walk_array_literal<V: Visitor>(visitor: &mut V,
     Default::default()
 }
 
-fn walk_object_literal<V: Visitor>(visitor: &mut V,
-                                   properties: &[Property]) -> V::Output {
+fn walk_object_literal<V: Visitor>(visitor: &mut V, properties: &[Property]) -> V::Output {
     for prop in properties {
         visitor.visit_expression(&*prop.value);
     }
@@ -455,15 +495,15 @@ fn walk_object_literal<V: Visitor>(visitor: &mut V,
     Default::default()
 }
 
-fn walk_unary_op<V: Visitor>(visitor: &mut V,
-                             expr: &SpannedExpression) -> V::Output {
+fn walk_unary_op<V: Visitor>(visitor: &mut V, expr: &SpannedExpression) -> V::Output {
     visitor.visit_expression(expr);
     Default::default()
 }
 
 fn walk_binary_op<V: Visitor>(visitor: &mut V,
                               left: &SpannedExpression,
-                              right: &SpannedExpression) -> V::Output {
+                              right: &SpannedExpression)
+                              -> V::Output {
     visitor.visit_expression(left);
     visitor.visit_expression(right);
     Default::default()
@@ -472,7 +512,8 @@ fn walk_binary_op<V: Visitor>(visitor: &mut V,
 fn walk_member_expression<V: Visitor>(visitor: &mut V,
                                       base: &SpannedExpression,
                                       target: &SpannedExpression,
-                                      calculated: bool) -> V::Output {
+                                      calculated: bool)
+                                      -> V::Output {
     visitor.visit_expression(base);
     if calculated {
         visitor.visit_expression(target);
@@ -483,10 +524,11 @@ fn walk_member_expression<V: Visitor>(visitor: &mut V,
 
 fn walk_assignment<V: Visitor>(visitor: &mut V,
                                target: &PatternOrExpression,
-                               value: &SpannedExpression) -> V::Output {
+                               value: &SpannedExpression)
+                               -> V::Output {
     match target {
         &PatternOrExpression::Expr(ref expr) => visitor.visit_expression(expr),
-        _ => Default::default()
+        _ => Default::default(),
     };
 
     visitor.visit_expression(value);
@@ -496,7 +538,8 @@ fn walk_assignment<V: Visitor>(visitor: &mut V,
 fn walk_conditional_expression<V: Visitor>(visitor: &mut V,
                                            cond: &SpannedExpression,
                                            true_value: &SpannedExpression,
-                                           false_value: &SpannedExpression) -> V::Output {
+                                           false_value: &SpannedExpression)
+                                           -> V::Output {
     visitor.visit_expression(cond);
     visitor.visit_expression(true_value);
     visitor.visit_expression(false_value);
@@ -506,7 +549,8 @@ fn walk_conditional_expression<V: Visitor>(visitor: &mut V,
 
 fn walk_call_expression<V: Visitor>(visitor: &mut V,
                                     base: &SpannedExpression,
-                                    args: &[SpannedExpression]) -> V::Output {
+                                    args: &[SpannedExpression])
+                                    -> V::Output {
     visitor.visit_expression(base);
     for arg in args {
         visitor.visit_expression(arg);

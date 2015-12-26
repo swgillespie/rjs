@@ -13,5 +13,8 @@ do
     CARGO_TARGET_DIR=./target cargo test --manifest-path=./src/${crate}/Cargo.toml || exit 1
 done
 
+export JS_TEST_COMMAND=./target/debug/rjs
+ruby test/run_tests.rb --no-use-color || exit 1
+
 
 echo "Build successful!"

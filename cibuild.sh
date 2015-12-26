@@ -14,7 +14,7 @@ do
 done
 
 export JS_TEST_COMMAND=./target/debug/rjs
-ruby test/run_tests.rb --no-use-color || exit 1
+ruby test/run_tests.rb || exit 1
 
 
 echo "Build successful!"

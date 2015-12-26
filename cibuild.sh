@@ -14,6 +14,9 @@ do
 done
 
 export JS_TEST_COMMAND=./target/debug/rjs
+cd test
+bundle install
+cd ..
 ruby test/run_tests.rb || exit 1
 
 

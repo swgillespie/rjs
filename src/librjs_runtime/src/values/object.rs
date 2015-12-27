@@ -12,6 +12,7 @@ use super::super::compiler::InternedString;
 use super::super::exec::engine::ExecutionEngine;
 use super::{Value, RootedValue, EvalValue, EvalResult};
 
+use values::function::Function;
 use values::property::Property;
 
 use std::vec::IntoIter;
@@ -30,7 +31,8 @@ macro_rules! reject {
 
 pub enum Object {
     Standard(StandardObject),
-    HostObject(Box<HostObject>),
+    Function(Function),
+    OtherObject(Box<HostObject>),
 }
 
 impl Default for Object {
@@ -44,7 +46,8 @@ impl Trace for Object {
     fn trace(&self) -> IntoIter<HeapObject> {
         match *self {
             Object::Standard(ref stdobj) => stdobj.trace(),
-            Object::HostObject(ref hostobj) => hostobj.trace(),
+            Object::Function(ref stdobj) => stdobj.trace(),
+            Object::OtherObject(ref hostobj) => hostobj.trace(),
         }
     }
 }
@@ -53,21 +56,24 @@ impl HostObject for Object {
     fn class(&mut self, ee: &mut ExecutionEngine) -> &'static str {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.class(ee),
-            Object::HostObject(ref mut hostobj) => hostobj.class(ee),
+            Object::Function(ref mut stdobj) => stdobj.class(ee),
+            Object::OtherObject(ref mut hostobj) => hostobj.class(ee),
         }
     }
 
     fn is_extensible(&mut self, ee: &mut ExecutionEngine) -> bool {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.is_extensible(ee),
-            Object::HostObject(ref mut hostobj) => hostobj.is_extensible(ee),
+            Object::Function(ref mut stdobj) => stdobj.is_extensible(ee),
+            Object::OtherObject(ref mut hostobj) => hostobj.is_extensible(ee),
         }
     }
 
     fn get(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> EvalValue {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.get(ee, property_name),
+            Object::Function(ref mut stdobj) => stdobj.get(ee, property_name),
+            Object::OtherObject(ref mut hostobj) => hostobj.get(ee, property_name),
         }
     }
 
@@ -77,14 +83,16 @@ impl HostObject for Object {
                         -> Option<Property> {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get_own_property(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.get_own_property(ee, property_name),
+            Object::Function(ref mut stdobj) => stdobj.get_own_property(ee, property_name),
+            Object::OtherObject(ref mut hostobj) => hostobj.get_own_property(ee, property_name),
         }
     }
 
     fn get_property(&mut self, ee: &mut ExecutionEngine, name: InternedString) -> Option<Property> {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.get_property(ee, name),
-            Object::HostObject(ref mut hostobj) => hostobj.get_property(ee, name),
+            Object::Function(ref mut stdobj) => stdobj.get_property(ee, name),
+            Object::OtherObject(ref mut hostobj) => hostobj.get_property(ee, name),
         }
     }
 
@@ -97,7 +105,8 @@ impl HostObject for Object {
 
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.put(ee, property_name, value, should_throw),
-            Object::HostObject(ref mut hostobj) => {
+            Object::Function(ref mut stdobj) => stdobj.put(ee, property_name, value, should_throw),
+            Object::OtherObject(ref mut hostobj) => {
                 hostobj.put(ee, property_name, value, should_throw)
             }
         }
@@ -106,14 +115,16 @@ impl HostObject for Object {
     fn can_put(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.can_put(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.can_put(ee, property_name),
+            Object::Function(ref mut stdobj) => stdobj.can_put(ee, property_name),
+            Object::OtherObject(ref mut hostobj) => hostobj.can_put(ee, property_name),
         }
     }
 
     fn has_property(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> bool {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.has_property(ee, property_name),
-            Object::HostObject(ref mut hostobj) => hostobj.has_property(ee, property_name),
+            Object::Function(ref mut stdobj) => stdobj.has_property(ee, property_name),
+            Object::OtherObject(ref mut hostobj) => hostobj.has_property(ee, property_name),
         }
     }
 
@@ -124,14 +135,16 @@ impl HostObject for Object {
               -> EvalResult<bool> {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.delete(ee, property_name, should_throw),
-            Object::HostObject(ref mut hostobj) => hostobj.delete(ee, property_name, should_throw),
+            Object::Function(ref mut stdobj) => stdobj.delete(ee, property_name, should_throw),
+            Object::OtherObject(ref mut hostobj) => hostobj.delete(ee, property_name, should_throw),
         }
     }
 
     fn default_value(&mut self, ee: &mut ExecutionEngine, hint: &RootedValue) -> RootedValue {
         match *self {
             Object::Standard(ref mut stdobj) => stdobj.default_value(ee, hint),
-            Object::HostObject(ref mut hostobj) => hostobj.default_value(ee, hint),
+            Object::Function(ref mut stdobj) => stdobj.default_value(ee, hint),
+            Object::OtherObject(ref mut hostobj) => hostobj.default_value(ee, hint),
         }
     }
 
@@ -145,9 +158,48 @@ impl HostObject for Object {
             Object::Standard(ref mut stdobj) => {
                 stdobj.define_own_property(ee, property_name, property, should_throw)
             }
-            Object::HostObject(ref mut hostobj) => {
+            Object::Function(ref mut stdobj) => {
+                stdobj.define_own_property(ee, property_name, property, should_throw)
+            }
+            Object::OtherObject(ref mut hostobj) => {
                 hostobj.define_own_property(ee, property_name, property, should_throw)
             }
+        }
+    }
+
+    fn call(&mut self,
+            ee: &mut ExecutionEngine,
+            args: Vec<RootedValue>,
+            this: RootedValue)
+            -> EvalValue {
+        match *self {
+            Object::Standard(ref mut stdobj) => stdobj.call(ee, args, this),
+            Object::Function(ref mut stdobj) => stdobj.call(ee, args, this),
+            Object::OtherObject(ref mut stdobj) => stdobj.call(ee, args, this),
+        }
+    }
+
+    fn construct(&mut self, ee: &mut ExecutionEngine, args: Vec<RootedValue>) -> EvalValue {
+        match *self {
+            Object::Standard(ref mut stdobj) => stdobj.construct(ee, args),
+            Object::Function(ref mut stdobj) => stdobj.construct(ee, args),
+            Object::OtherObject(ref mut stdobj) => stdobj.construct(ee, args),
+        }
+    }
+
+    fn has_instance(&mut self, ee: &mut ExecutionEngine, value: &RootedValue) -> EvalResult<bool> {
+        match *self {
+            Object::Standard(ref mut stdobj) => stdobj.has_instance(ee, value),
+            Object::Function(ref mut stdobj) => stdobj.has_instance(ee, value),
+            Object::OtherObject(ref mut stdobj) => stdobj.has_instance(ee, value),
+        }
+    }
+
+    fn primitive_value(&mut self, ee: &mut ExecutionEngine) -> EvalValue {
+        match *self {
+            Object::Standard(ref mut stdobj) => stdobj.primitive_value(ee),
+            Object::Function(ref mut stdobj) => stdobj.primitive_value(ee),
+            Object::OtherObject(ref mut stdobj) => stdobj.primitive_value(ee),
         }
     }
 }

@@ -55,13 +55,18 @@ impl Default for Activation {
 
 impl Activation {
     pub fn new_function_activation(ee: &mut ExecutionEngine,
-                                   parent: Option<ActivationPtr>,
+                                   parent: Option<RootedActivationPtr>,
                                    this: RootedValue)
                                    -> RootedActivationPtr {
-        let act = Activation {
-            backing_repr: ActivationKind::Function(FunctionActivation::new(parent, this)),
-        };
+        // this function may trigger a GC, so we must call it first before unrooting the
+        // activation.
         let heap_ptr = ee.heap_mut().allocate_activation();
+        let act = Activation {
+            backing_repr: ActivationKind::Function(FunctionActivation::new(parent.map(|a| {
+                                                                               a.into_inner()
+                                                                           }),
+                                                                           this)),
+        };
         *heap_ptr.borrow_mut() = act;
         heap_ptr
     }

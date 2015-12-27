@@ -707,6 +707,7 @@ impl BytecodeBuilder {
         self.is_strict = func.is_strict();
         emitter.set_name(func.name());
         emitter.set_arity(func.parameters().len());
+        emitter.set_arguments(func.parameters());
         for stmt in func.body() {
             self.lower_statement(&mut emitter, stmt);
         }

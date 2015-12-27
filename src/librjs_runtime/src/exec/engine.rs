@@ -5,6 +5,7 @@ use heap::{Heap, RootedActivationPtr};
 use values::{EvalResult, RootedValue, EvalValue, Value, IntoRootedValue};
 use values::activation::Activation;
 use values::object::HostObject;
+use values::function::{FunctionType, Function};
 use exec::frame::Frame;
 use compiler::{self, CompiledProgram, CompiledFunction, StringInterner, Opcode};
 use exec::helpers;
@@ -33,11 +34,17 @@ impl ExecutionEngine {
         //
         // In order to avoid moving heap, we initialize global object to be uninitialized
         // and fill it in immediately afterward using the heap in its final place.
-        let ee = ExecutionEngine {
+        let mut ee = ExecutionEngine {
             heap: Box::new(Heap::new()),
             stack: LinkedList::new(),
             program: program,
         };
+
+        // set up the initial stack frame
+        let obj = ee.heap.root_value(Value::Undefined); // TODO global object this
+        let global_act = Activation::new_function_activation(&mut ee, None, obj);
+        let global_frame = Frame::new(global_act, "<global frame>".to_string());
+        ee.stack.push_front(global_frame);
 
         // let obj = ee.heap_mut().allocate_object();
         // ee.global_object = obj.into_rooted_value(ee.heap_mut());
@@ -70,7 +77,10 @@ impl ExecutionEngine {
         // contains the code that should be evaled.
         // According to the spec, eval code should use the same environment
         // as its caller, so we use the existing activation.
-        let activation = self.get_activation();
+        let activation = self.stack
+                             .front()
+                             .map(|f| f.activation.clone())
+                             .expect("stack will not be empty here");
 
         let code = {
             self.program.current_global_function().to_vec()
@@ -81,23 +91,31 @@ impl ExecutionEngine {
         self.execute(activation, &code)
     }
 
-    // Helper function to the above function to get around the borrow checker
-    // limitation on this if let.
-    fn get_activation(&mut self) -> RootedActivationPtr {
-        // if the stack has been set up, i.e. this is a call to `eval`,
-        // use the previous frame's activation.
+    pub fn expose_function<S, F>(&mut self, name: S, func: F)
+        where S: AsRef<str>,
+              F: Fn(&mut ExecutionEngine, RootedValue, Vec<RootedValue>) -> EvalValue + 'static
+    {
+        let global_act = self.stack
+                             .back()
+                             .map(|f| f.activation.clone())
+                             .expect("stack should not be null here");
+        let ptr: Box<Fn(&mut ExecutionEngine, RootedValue, Vec<RootedValue>) -> EvalValue> =
+            Box::new(func);
 
-        // TODO the borrow checker is not intelligent enough to figure out that
-        // the borrow of self.stack does not extend to the else.
-
-        if let Some(frame) = self.stack.front() {
-            return frame.activation.clone();
-        }
-
-        // otherwise, we need to create the root activation, with `this` as
-        // the global object.
-        let obj = self.heap.root_value(Value::Undefined); // TODO global object this
-        return Activation::new_function_activation(self, None, obj);
+        // the activation here doesn't matter, it won't get used.
+        let function_obj = Function::new(self, FunctionType::Native(ptr), 0, &global_act);
+        let name_idx = self.interner_mut().intern(name);
+        // TODO this will panic if this is called before calling eval, which is common.
+        let global_act = self.stack
+                             .back()
+                             .map(|f| f.activation.clone())
+                             .expect("stack should not be null here");
+        global_act.borrow_mut()
+                  .create_mutable_binding(self, name_idx, true)
+                  .expect("should never throw");
+        global_act.borrow_mut()
+                  .set_mutable_binding(self, name_idx, &function_obj, false)
+                  .expect("should never throw");
     }
 
     pub fn call(&mut self,
@@ -112,10 +130,39 @@ impl ExecutionEngine {
                     .unwrap_or("<anonymous function>")
                     .to_string()
         };
+        // creating a new function activation
+        let function_act = Activation::new_function_activation(self,
+                                                               Some(activation.clone()),
+                                                               this.clone());
+
+        // Section 10.5 - Declaration Binding Instantiation
+
+        // TODO arguments object
+        for (i, arg) in code_obj.arguments().iter().enumerate() {
+            let value = if i >= args.len() {
+                self.heap.root_value(Value::undefined())
+            } else {
+                args[i].clone()
+            };
+
+            if !function_act.borrow().has_binding(self, *arg) {
+                // SPEC_NOTE/TODO: the spec does not indicate whether or not
+                // this activation entry is deletable.
+                function_act.borrow_mut()
+                            .create_mutable_binding(self, *arg, false)
+                            .expect("should never throw here");
+            }
+
+            function_act.borrow_mut()
+                        .set_mutable_binding(self, *arg, &value, false)
+                        .expect("should never throw here");
+        }
         // create a new stack frame and stick it on the stack.
-        let frame = Frame::new(activation.clone(), frame_name);
+        let frame = Frame::new(function_act.clone(), frame_name);
         self.stack.push_front(frame);
-        self.execute(activation, code_obj.code())
+
+        // let's go!
+        self.execute(function_act, code_obj.code())
     }
 
     pub fn heap_mut(&mut self) -> &mut Heap {
@@ -630,9 +677,14 @@ impl ExecutionEngine {
                 }
                 Opcode::LdRegex(regex, flags) => panic!("unimplemented: ldregex"),
                 Opcode::LdLambda(index) => {
-                    let compiled_function = &self.program.function_index(index);
+                    let compiled_function = self.program.function_index(index).clone();
+                    let arity = compiled_function.arity();
                     // make a code object
-                    unimplemented!()
+                    let func = Function::new(self,
+                                             FunctionType::Interpreted(compiled_function),
+                                             arity,
+                                             &activation);
+                    stack.push(func);
                 }
                 Opcode::LdObject => panic!("unimplemented: ldobject"),
                 Opcode::Ret => {
@@ -648,7 +700,18 @@ impl ExecutionEngine {
                     // throw exception
                     unimplemented!()
                 }
-                Opcode::Call(num_args) => panic!("unimplemented: call"),
+                Opcode::Call(num_args) => {
+                    let mut args = vec![];
+                    for _ in 0..num_args {
+                        args.push(stack.pop().expect("popped from empty stack: call"));
+                    }
+
+                    args.reverse();
+                    let this = stack.pop().expect("popped from empty stack: call");
+                    let func = stack.pop().expect("popped from empty stack: call");
+                    let result = try!(self.call_internal(func, args, this));
+                    stack.push(result);
+                }
                 Opcode::New(num_args) => panic!("unimplemented: new"),
                 Opcode::Def(name) => {
                     let value = stack.pop().expect("popped from empty stack: def");
@@ -666,5 +729,18 @@ impl ExecutionEngine {
 
             ip += 1;
         }
+    }
+
+    fn call_internal(&mut self,
+                     func: RootedValue,
+                     args: Vec<RootedValue>,
+                     this: RootedValue)
+                     -> EvalValue {
+        if !func.is_object() {
+            return self.throw_type_error("value is not a function");
+        }
+
+        let func_obj = func.unwrap_object();
+        return func_obj.borrow_mut().call(self, args, this);
     }
 }

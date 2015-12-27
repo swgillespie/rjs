@@ -296,7 +296,8 @@ impl Heap {
     allocate!(allocate_number, RootedNumberPtr, number_arena);
 
     /// Allocates a boolean on the garbage-collected heap and returns
-    /// a rooted pointer to it.    /// ## GC Considerations
+    /// a rooted pointer to it.
+    /// ## GC Considerations
     /// This function may trigger a garbage collection.
     allocate!(allocate_boolean, RootedBooleanPtr, boolean_arena);
 

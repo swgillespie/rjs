@@ -62,6 +62,7 @@ impl CompiledProgram {
 pub struct CompiledFunction {
     name: Option<InternedString>,
     arity: usize,
+    argument_names: Vec<InternedString>,
     code: Box<[Opcode]>,
 }
 
@@ -72,6 +73,10 @@ impl CompiledFunction {
 
     pub fn name(&self) -> Option<InternedString> {
         self.name
+    }
+
+    pub fn arguments(&self) -> &[InternedString] {
+        &self.argument_names
     }
 
     pub fn code<'a>(&'a self) -> &'a [Opcode] {
@@ -382,6 +387,7 @@ impl GlobalEmitter {
 pub struct FunctionEmitter {
     arity: usize,
     index: usize,
+    arguments: Vec<InternedString>,
     opcodes: Vec<Opcode>,
     name: Option<InternedString>,
     label_table: Vec<usize>,
@@ -411,6 +417,7 @@ impl FunctionEmitter {
         FunctionEmitter {
             arity: 0,
             index: index,
+            arguments: vec![],
             opcodes: vec![],
             name: None,
             label_table: vec![],
@@ -425,12 +432,17 @@ impl FunctionEmitter {
         self.name = name;
     }
 
+    pub fn set_arguments(&mut self, arguments: &[InternedString]) {
+        self.arguments = arguments.to_vec();
+    }
+
     pub fn bake(mut self) -> CompiledFunction {
         fixup_labels(&mut self.opcodes, &self.label_table);
 
         let compiled = CompiledFunction {
             name: self.name,
             arity: self.arity,
+            argument_names: self.arguments,
             code: self.opcodes.into_boxed_slice(),
         };
 

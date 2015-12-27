@@ -1,30 +1,64 @@
 use compiler::{CompiledFunction, InternedString};
 use values::property::Property;
-use values::object::{self, PropertyMap, HostObject};
-use values::{RootedValue, EvalResult, EvalValue};
-use heap::{Trace, HeapObject, ToHeapObject, ActivationPtr};
+use values::object::{self, PropertyMap, HostObject, Object};
+use values::{RootedValue, EvalResult, EvalValue, Value, IntoRootedValue};
+use heap::{Trace, HeapObject, ToHeapObject, ActivationPtr, RootedActivationPtr};
 use exec::engine::ExecutionEngine;
 
 use std::vec::IntoIter;
 use std::collections::HashMap;
 
+pub enum FunctionType {
+    Interpreted(CompiledFunction),
+    Native(Box<Fn(&mut ExecutionEngine, RootedValue, Vec<RootedValue>) -> EvalValue>),
+}
+
 pub struct Function {
-    code: CompiledFunction,
+    code: FunctionType,
     length: Property,
-    target_function: Property,
-    bound_this: Property,
-    bound_arguments: Property,
+    // target_function: Property,
+    // bound_this: Property,
+    // bound_arguments: Property,
     scope: ActivationPtr,
     other_props: HashMap<InternedString, Property>,
+}
+
+impl Function {
+    // Section 13.2 - Creating Function Objects
+    pub fn new(ee: &mut ExecutionEngine,
+               code: FunctionType,
+               length: usize,
+               scope: &RootedActivationPtr)
+               -> RootedValue {
+        // TODO function prototype
+        let obj = ee.heap_mut().allocate_object();
+        let len = ee.heap_mut().allocate_number();
+        *len.borrow_mut() = length as f64;
+        let func = Function {
+            code: code,
+            length: Property::Named {
+                value: Some(Value::Number(len.into_inner())),
+                writable: Some(false),
+                enumerable: Some(false),
+                configurable: Some(false),
+            },
+            scope: scope.clone().into_inner(),
+            other_props: HashMap::new(),
+        };
+
+        // TODO contructor and prototype
+        *obj.borrow_mut() = Object::Function(func);
+        obj.into_rooted_value(ee.heap_mut())
+    }
 }
 
 impl Trace for Function {
     fn trace(&self) -> IntoIter<HeapObject> {
         let mut ptrs = vec![];
         ptrs.extend(self.length.trace());
-        ptrs.extend(self.target_function.trace());
-        ptrs.extend(self.bound_this.trace());
-        ptrs.extend(self.bound_arguments.trace());
+        // ptrs.extend(self.target_function.trace());
+        // ptrs.extend(self.bound_this.trace());
+        // ptrs.extend(self.bound_arguments.trace());
         ptrs.push(self.scope.to_heap_object().expect("activations are always heap objects"));
         ptrs.into_iter()
     }
@@ -92,8 +126,10 @@ impl HostObject for Function {
     fn get(&mut self, ee: &mut ExecutionEngine, property_name: InternedString) -> EvalValue {
         // TODO objects created by bind?
         let result = try!(object::object_get(self, ee, property_name));
-        if self.code.is_strict() && ee.interner().get(property_name) == "caller" {
-            return ee.throw_type_error("caller is not permitted in strict code");
+        if let FunctionType::Interpreted(ref code) = self.code {
+            if code.is_strict() && ee.interner().get(property_name) == "caller" {
+                return ee.throw_type_error("caller is not permitted in strict code");
+            }
         }
 
         return Ok(result);
@@ -144,8 +180,21 @@ impl HostObject for Function {
             args: Vec<RootedValue>,
             this: RootedValue)
             -> EvalValue {
-        let scope = ee.heap_mut().root_value(self.scope);
-        ee.call(&self.code, &args, &this, scope)
+        match self.code {
+            FunctionType::Interpreted(ref code) => {
+                // if this is a ECMAScript function, call it by invoking
+                // the execution engine (which sets up the frame, scope, etc.)
+                let scope = ee.heap_mut().root_value(self.scope);
+                ee.call(code, &args, &this, scope)
+            }
+            FunctionType::Native(ref closure) => {
+                // otherwise, this is a call into Rust code.
+                // Rust code is free to do arbitrary things with the evaluation engine,
+                // so we don't create a new scope. (In particular, eval is implemented
+                // as a native function.)
+                closure(ee, this, args)
+            }
+        }
     }
 
     fn construct(&mut self, _: &mut ExecutionEngine, _: Vec<RootedValue>) -> EvalValue {

@@ -1,5 +1,4 @@
 /*===
-<ignore("function calls don't work")>
 false
 ===*/
 var x = true;

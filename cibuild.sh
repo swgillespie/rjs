@@ -13,6 +13,6 @@ do
     CARGO_TARGET_DIR=./target cargo test --manifest-path=./src/${crate}/Cargo.toml || exit 1
 done
 
-source run_tests.sh
+sh ./run_tests.sh
 
 echo "Build successful!"

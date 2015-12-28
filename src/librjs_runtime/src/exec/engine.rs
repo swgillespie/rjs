@@ -741,6 +741,6 @@ impl ExecutionEngine {
         }
 
         let func_obj = func.unwrap_object();
-        return func_obj.borrow_mut().call(self, args, this);
+        return func_obj.borrow().call(self, args, this);
     }
 }

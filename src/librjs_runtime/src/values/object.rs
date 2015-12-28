@@ -167,15 +167,15 @@ impl HostObject for Object {
         }
     }
 
-    fn call(&mut self,
+    fn call(&self,
             ee: &mut ExecutionEngine,
             args: Vec<RootedValue>,
             this: RootedValue)
             -> EvalValue {
         match *self {
-            Object::Standard(ref mut stdobj) => stdobj.call(ee, args, this),
-            Object::Function(ref mut stdobj) => stdobj.call(ee, args, this),
-            Object::OtherObject(ref mut stdobj) => stdobj.call(ee, args, this),
+            Object::Standard(ref stdobj) => stdobj.call(ee, args, this),
+            Object::Function(ref stdobj) => stdobj.call(ee, args, this),
+            Object::OtherObject(ref stdobj) => stdobj.call(ee, args, this),
         }
     }
 
@@ -681,7 +681,7 @@ pub trait HostObject : Trace {
                            should_throw: bool)
                            -> EvalResult<bool>;
 
-    fn call(&mut self, ee: &mut ExecutionEngine, _: Vec<RootedValue>, _: RootedValue) -> EvalValue {
+    fn call(&self, ee: &mut ExecutionEngine, _: Vec<RootedValue>, _: RootedValue) -> EvalValue {
         ee.throw_type_error("value is not callable")
     }
 

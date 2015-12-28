@@ -175,7 +175,7 @@ impl HostObject for Function {
         object::object_define_own_property(self, ee, name, prop, should_throw)
     }
 
-    fn call(&mut self,
+    fn call(&self,
             ee: &mut ExecutionEngine,
             args: Vec<RootedValue>,
             this: RootedValue)

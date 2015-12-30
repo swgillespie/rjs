@@ -14,6 +14,7 @@ pub struct BytecodeBuilder {
     interner: StringInterner,
     is_strict: bool,
     should_produce_result: bool,
+    produced_result: bool,
     functions: Vec<CompiledFunction>,
     function_index: Cell<usize>,
 }
@@ -24,6 +25,7 @@ impl BytecodeBuilder {
             interner: interner,
             is_strict: false,
             should_produce_result: false,
+            produced_result: false,
             functions: vec![],
             function_index: Cell::new(0),
         }
@@ -37,6 +39,7 @@ impl BytecodeBuilder {
             interner: compiled.interner().clone(),
             is_strict: false,
             should_produce_result: false,
+            produced_result: false,
             functions: compiled.functions().to_vec(),
             function_index: Cell::new(compiled.functions().len()),
         }
@@ -67,9 +70,15 @@ impl BytecodeBuilder {
         }
 
         // the entire block evaluates to the last statement in the block.
+        let saved_produce = self.produced_result;
         self.should_produce_result = true;
+        self.produced_result = false;
         self.lower_statement(&mut global_emitter, &last[0]);
+        if !self.produced_result {
+            global_emitter.emit_ldundefined();
+        }
         self.should_produce_result = saved;
+        self.produced_result = saved;
 
         global_emitter.emit_ret();
         global_emitter.bake(self.functions, self.interner)
@@ -131,6 +140,8 @@ impl BytecodeBuilder {
 
         if !self.should_produce_result {
             emitter.emit_pop();
+        } else {
+            self.produced_result = true;
         }
     }
 
@@ -150,7 +161,14 @@ impl BytecodeBuilder {
 
         // the entire block evaluates to the last statement in the block.
         self.should_produce_result = true;
+        let saved_produce = self.produced_result;
+        self.produced_result = false;
         self.lower_statement(emitter, &last[0]);
+        if !self.produced_result {
+            emitter.emit_ldundefined();
+        }
+
+        self.produced_result = saved_produce;
         self.should_produce_result = saved;
     }
 
@@ -242,6 +260,13 @@ impl BytecodeBuilder {
             emitter.emit_brfalse(done_label);
             self.lower_statement(emitter, true_branch);
             emitter.mark_label(done_label);
+        }
+
+        // if this if statement is supposed to produce a result,
+        // each `lower_statement` call will recursively produce a result
+        // and there's nothing to do here.
+        if self.should_produce_result {
+            self.produced_result = true;
         }
     }
 
@@ -700,7 +725,7 @@ impl BytecodeBuilder {
         emitter.emit_get_element();
     }
 
-    fn lower_function<'a>(&mut self, func: &hir::Function) -> FunctionEmitter {
+    fn lower_function(&mut self, func: &hir::Function) -> FunctionEmitter {
         let index = self.next_function_index();
         let mut emitter = FunctionEmitter::new(index);
         let old_strict = self.is_strict;
@@ -711,6 +736,12 @@ impl BytecodeBuilder {
         for stmt in func.body() {
             self.lower_statement(&mut emitter, stmt);
         }
+
+        // we have to emit an undefined return at the end
+        // of every function, since all functions have an
+        // implicit "return" statement.
+        emitter.emit_ldundefined();
+        emitter.emit_ret();
 
         self.is_strict = old_strict;
         emitter

@@ -23,8 +23,8 @@ fn main() {
     let mut ee = ExecutionEngine::new(Default::default());
 
     // expose a printing function
-    ee.expose_function("print", |ee, _, args| {
-        for (i, arg) in args.iter().enumerate() {
+    ee.expose_function("print", |ee, _, arguments| {
+        for (i, arg) in arguments.iter().enumerate() {
             if i != 0 {
                 print!(" ");
             }
@@ -35,6 +35,21 @@ fn main() {
         println!("");
         return Ok(ee.heap_mut().root_value(Value::undefined()));
     });
+
+    // expose that same function as $ERROR for use with test262
+    ee.expose_function("$ERROR", |ee, _, arguments| {
+        for (i, arg) in arguments.iter().enumerate() {
+            if i != 0 {
+                print!(" ");
+            }
+            let s = librjs::runtime::exec::helpers::to_string(ee, arg);
+            print!("{}", s);
+        }
+
+        println!("");
+        return Ok(ee.heap_mut().root_value(Value::undefined()));
+    });
+
     if args.len() == 2 {
         exec_file(&mut ee, &args[1]);
         return;
@@ -63,6 +78,8 @@ fn main() {
 
         writeln!(&mut stdout, "{}", result).unwrap();
         stdout.flush().unwrap();
+
+        dis::disassemble_program(ee.program());
     }
 }
 

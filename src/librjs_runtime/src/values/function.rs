@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 pub enum FunctionType {
     Interpreted(CompiledFunction),
-    Native(Box<Fn(&mut ExecutionEngine, RootedValue, Vec<RootedValue>) -> EvalValue>),
+    Native(String, Box<Fn(&mut ExecutionEngine, RootedValue, Vec<RootedValue>) -> EvalValue>),
 }
 
 pub struct Function {
@@ -187,11 +187,14 @@ impl HostObject for Function {
                 let scope = ee.heap_mut().root_value(self.scope);
                 ee.call(code, &args, &this, scope)
             }
-            FunctionType::Native(ref closure) => {
+            FunctionType::Native(ref name, ref closure) => {
                 // otherwise, this is a call into Rust code.
                 // Rust code is free to do arbitrary things with the evaluation engine,
                 // so we don't create a new scope. (In particular, eval is implemented
                 // as a native function.)
+                // We do need to set up a dummy stack frame, though, so that unwinding
+                // works correctly.
+                ee.create_native_frame(name);
                 closure(ee, this, args)
             }
         }

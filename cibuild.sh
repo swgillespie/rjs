@@ -1,6 +1,6 @@
 #!/bin/bash
 
-rm -rf target
+# rm -rf target
 mkdir -p target
 
 for crate in rjs

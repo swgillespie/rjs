@@ -1,6 +1,6 @@
 require 'test/unit'
+require 'tempfile'
 
-TEST_FOLDERS = ['ecmascript_src']
 TEST_COMMAND = ENV['JS_TEST_COMMAND']
 TEST_DIR = File.dirname(File.expand_path $0)
 
@@ -12,12 +12,10 @@ puts "Using test command #{TEST_COMMAND}"
 
 ESTest = Struct.new(:name, :filename, :output, :ignore_reason)
 
-def create_test_cases
+def create_test_cases(folder)
   tests = []
-  TEST_FOLDERS.each do |folder|
-    Dir.glob(File.join TEST_DIR, folder, '*.js').each do |file|
-      tests << create_test_case(file)
-    end
+  Dir.glob(File.join TEST_DIR, folder, '**', '*.js').each do |file|
+    tests << create_test_case(file)
   end
 
   return tests
@@ -41,12 +39,16 @@ def create_test_case(filename)
   return ESTest.new(name, filename, output, ignore_reason)
 end
 
-Class.new Test::Unit::TestCase do
-  create_test_cases().each do |test|
-    define_method "test_" + test.name do
-      omit("skipping the test because: #{test.ignore_reason}") unless test.ignore_reason.nil?
-      stdout = `#{TEST_COMMAND} #{test.filename} 2>&1`
-      assert_equal test.output, stdout
+def create_test_class(source_dir)
+  Class.new Test::Unit::TestCase do
+    create_test_cases(source_dir).each do |test|
+      define_method "test_" + test.name do
+        omit("skipping the test because: #{test.ignore_reason}") unless test.ignore_reason.nil?
+        stdout = `#{TEST_COMMAND} #{test.filename} 2>&1`
+        assert_equal test.output, stdout
+      end
     end
   end
 end
+
+ECMAScriptBasicTests = create_test_class 'ecmascript_src'

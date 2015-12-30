@@ -85,7 +85,7 @@ impl CompiledFunction {
 
     pub fn is_strict(&self) -> bool {
         // TODO
-        unimplemented!()
+        false
     }
 }
 

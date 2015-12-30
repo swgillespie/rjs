@@ -17,6 +17,8 @@ use std::convert::AsRef;
 use std::collections::LinkedList;
 use std::f64;
 
+const MAXIMUM_STACK_SIZE: usize = 2048;
+
 pub struct ExecutionEngine {
     heap: Box<Heap>,
     stack: LinkedList<Frame>,
@@ -103,7 +105,10 @@ impl ExecutionEngine {
             Box::new(func);
 
         // the activation here doesn't matter, it won't get used.
-        let function_obj = Function::new(self, FunctionType::Native(ptr), 0, &global_act);
+        let function_obj = Function::new(self,
+                                         FunctionType::Native(name.as_ref().to_string(), ptr),
+                                         0,
+                                         &global_act);
         let name_idx = self.interner_mut().intern(name);
         // TODO this will panic if this is called before calling eval, which is common.
         let global_act = self.stack
@@ -158,6 +163,15 @@ impl ExecutionEngine {
                         .expect("should never throw here");
         }
         // create a new stack frame and stick it on the stack.
+
+        if self.stack.len() >= MAXIMUM_STACK_SIZE {
+            // SPEC_NOTE: RangeError on stack overflow, the same as v8 does.
+            // the spec does not specify what occurs on stack overflow because
+            // the spec does not require a stack, although we (and most implementations)
+            // use one.
+            return self.throw_range_error("exceeded maximum stack size");
+        }
+
         let frame = Frame::new(function_act.clone(), frame_name);
         self.stack.push_front(frame);
 
@@ -198,6 +212,10 @@ impl ExecutionEngine {
     }
 
     pub fn throw_syntax_error<T>(&self, message: &'static str) -> EvalResult<T> {
+        unimplemented!()
+    }
+
+    pub fn throw_range_error<T>(&self, message: &'static str) -> EvalResult<T> {
         unimplemented!()
     }
 
@@ -709,8 +727,19 @@ impl ExecutionEngine {
                     args.reverse();
                     let this = stack.pop().expect("popped from empty stack: call");
                     let func = stack.pop().expect("popped from empty stack: call");
-                    let result = try!(self.call_internal(func, args, this));
-                    stack.push(result);
+
+                    // call_internal ultimately sets up the stack frame and jumps to the
+                    // target function's code.
+                    let result = self.call_internal(func, args, this);
+
+                    // "result" is either a normal return or a throw. Either way we need
+                    // to dispose the stack frame.
+                    self.stack.pop_front().expect("stack will not be empty here");
+
+                    // the "throw" occurs here if the called function threw an exception.
+                    // TODO: jump to the catch/finally block on throw instead of returning
+                    let actual_result = try!(result);
+                    stack.push(actual_result);
                 }
                 Opcode::New(num_args) => panic!("unimplemented: new"),
                 Opcode::Def(name) => {
@@ -742,5 +771,12 @@ impl ExecutionEngine {
 
         let func_obj = func.unwrap_object();
         return func_obj.borrow().call(self, args, this);
+    }
+
+    pub fn create_native_frame(&mut self, name: &str) {
+        info!(target: "exec", "creating dummy stack frame for native function \"{}\"", name);
+        let dummy_activation = self.heap.allocate_activation();
+        let frame = Frame::new(dummy_activation, name.to_string());
+        self.stack.push_front(frame);
     }
 }
